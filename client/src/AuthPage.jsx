@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
-import { API_BASE } from './socket';
+import { API_BASE, safeJson } from './socket';
 
 export default function AuthPage({ mode }) {
   const isRegister = mode === 'register';
@@ -25,7 +25,7 @@ export default function AuthPage({ mode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.message || 'Something went wrong');
 
       localStorage.setItem('h5c_player_token', data.token);

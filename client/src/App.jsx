@@ -6,7 +6,7 @@ import {
   Play, Volume2, ShieldCheck, Zap, X, Landmark, Send, Smartphone,
   CreditCard, DollarSign, Bitcoin, Clock, Paperclip, Loader2, LogOut
 } from 'lucide-react';
-import { socket, API_BASE } from './socket';
+import { socket, API_BASE, safeJson } from './socket';
 
 function getOrCreateUserId() {
   let uid = localStorage.getItem('h5c_uid');
@@ -184,7 +184,7 @@ export default function App() {
       const formData = new FormData();
       formData.append('file', file);
       const res = await fetch(`${API_BASE}/api/upload`, { method: 'POST', body: formData });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.url) {
         socket.emit('user:message', { conversationId: conversationIdRef.current, imageUrl: data.url });
       }

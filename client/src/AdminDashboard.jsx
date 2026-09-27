@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   LogOut, Send, Paperclip, Inbox, CheckCircle2, XCircle, Loader2, ShieldCheck, Bell, X,
 } from 'lucide-react';
-import { socket, API_BASE } from './socket';
+import { socket, API_BASE, safeJson } from './socket';
 import { subscribeAdminToPush } from './push';
 
 const TOKEN_KEY = 'h5c_admin_token';
@@ -166,7 +166,7 @@ export default function AdminDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(loginForm),
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.message || 'Login failed');
       localStorage.setItem(TOKEN_KEY, data.token);
       setToken(data.token);
@@ -198,7 +198,7 @@ export default function AdminDashboard() {
       const res = await fetch(`${API_BASE}/api/conversations/${id}/messages`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       setMessages(data);
     } catch {
       // conversation stays empty on failure
@@ -227,7 +227,7 @@ export default function AdminDashboard() {
       const formData = new FormData();
       formData.append('file', file);
       const res = await fetch(`${API_BASE}/api/upload`, { method: 'POST', body: formData });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (data.url) socket.emit('admin:message', { conversationId: selectedId, imageUrl: data.url });
     } catch {
       // upload failed silently — demo scope
