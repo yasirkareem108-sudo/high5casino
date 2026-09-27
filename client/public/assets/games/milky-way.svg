@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200" viewBox="0 0 300 200">
+  <defs>
+    <linearGradient id="bg-milky-way" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#170B33"/>
+      <stop offset="100%" stop-color="#4B1D8C"/>
+    </linearGradient>
+    <radialGradient id="glow-milky-way" cx="50%" cy="38%" r="65%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="300" height="200" fill="url(#bg-milky-way)"/>
+  <rect width="300" height="200" fill="url(#glow-milky-way)"/>
+  
+      <circle cx="150" cy="100" r="45" fill="none" stroke="#B48CFF" stroke-width="4" stroke-dasharray="6 10"/>
+      <circle cx="150" cy="100" r="10" fill="#F5D061"/>
+      <circle cx="70" cy="50" r="2" fill="#fff"/>
+      <circle cx="235" cy="150" r="2" fill="#fff"/>
+      <circle cx="60" cy="160" r="1.5" fill="#fff"/>
+      <circle cx="245" cy="55" r="1.5" fill="#fff"/>
+      <path d="M210 60 q10 6 0 12 q-10 -2 -6 -12z" fill="#7CE8C6"/>
+  <rect x="4" y="4" width="292" height="192" rx="10" fill="none" stroke="#F2C14E" stroke-width="3" stroke-opacity="0.9"/>
+  <circle cx="14" cy="14" r="3" fill="#F2C14E"/>
+  <circle cx="286" cy="14" r="3" fill="#F2C14E"/>
+  <circle cx="14" cy="186" r="3" fill="#F2C14E"/>
+  <circle cx="286" cy="186" r="3" fill="#F2C14E"/>
+</svg>

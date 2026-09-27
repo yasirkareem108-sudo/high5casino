@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200" viewBox="0 0 300 200">
+  <defs>
+    <linearGradient id="bg-mr-all-in-one" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#071026"/>
+      <stop offset="100%" stop-color="#24406B"/>
+    </linearGradient>
+    <radialGradient id="glow-mr-all-in-one" cx="50%" cy="38%" r="65%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="300" height="200" fill="url(#bg-mr-all-in-one)"/>
+  <rect width="300" height="200" fill="url(#glow-mr-all-in-one)"/>
+  
+      <rect x="120" y="90" width="60" height="14" rx="3" fill="#111"/>
+      <rect x="130" y="45" width="40" height="50" rx="4" fill="#111"/>
+      <rect x="130" y="80" width="40" height="8" fill="#F5D061"/>
+      <text x="85" y="158" font-family="Arial, sans-serif" font-size="26" fill="#E63946">&#9824;</text>
+      <text x="200" y="158" font-family="Arial, sans-serif" font-size="26" fill="#E63946">&#9829;</text>
+  <rect x="4" y="4" width="292" height="192" rx="10" fill="none" stroke="#F2C14E" stroke-width="3" stroke-opacity="0.9"/>
+  <circle cx="14" cy="14" r="3" fill="#F2C14E"/>
+  <circle cx="286" cy="14" r="3" fill="#F2C14E"/>
+  <circle cx="14" cy="186" r="3" fill="#F2C14E"/>
+  <circle cx="286" cy="186" r="3" fill="#F2C14E"/>
+</svg>

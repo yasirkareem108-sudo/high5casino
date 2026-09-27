@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200" viewBox="0 0 300 200">
+  <defs>
+    <linearGradient id="bg-game-vault" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#04231F"/>
+      <stop offset="100%" stop-color="#0F7A73"/>
+    </linearGradient>
+    <radialGradient id="glow-game-vault" cx="50%" cy="38%" r="65%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="300" height="200" fill="url(#bg-game-vault)"/>
+  <rect width="300" height="200" fill="url(#glow-game-vault)"/>
+  
+      <rect x="112" y="58" width="76" height="84" rx="8" fill="#0E4B45" stroke="#F5D061" stroke-width="4"/>
+      <circle cx="150" cy="96" r="17" fill="#F5D061"/>
+      <rect x="146" y="101" width="8" height="18" fill="#F5D061"/>
+      <path d="M60 160 q10 -12 20 0" stroke="#7CE8C6" stroke-width="3" fill="none"/>
+  <rect x="4" y="4" width="292" height="192" rx="10" fill="none" stroke="#F2C14E" stroke-width="3" stroke-opacity="0.9"/>
+  <circle cx="14" cy="14" r="3" fill="#F2C14E"/>
+  <circle cx="286" cy="14" r="3" fill="#F2C14E"/>
+  <circle cx="14" cy="186" r="3" fill="#F2C14E"/>
+  <circle cx="286" cy="186" r="3" fill="#F2C14E"/>
+</svg>

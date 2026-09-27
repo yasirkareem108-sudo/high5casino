@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200" viewBox="0 0 300 200">
+  <defs>
+    <linearGradient id="bg-orion-star" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B1130"/>
+      <stop offset="100%" stop-color="#1E2A78"/>
+    </linearGradient>
+    <radialGradient id="glow-orion-star" cx="50%" cy="38%" r="65%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="300" height="200" fill="url(#bg-orion-star)"/>
+  <rect width="300" height="200" fill="url(#glow-orion-star)"/>
+  
+      <circle cx="60" cy="40" r="2" fill="#fff"/>
+      <circle cx="230" cy="55" r="1.5" fill="#fff"/>
+      <circle cx="90" cy="155" r="1.5" fill="#fff"/>
+      <circle cx="250" cy="140" r="2" fill="#fff"/>
+      <circle cx="40" cy="120" r="1" fill="#fff"/>
+      <circle cx="205" cy="30" r="1" fill="#fff"/>
+      <path d="M150 55 L162 92 L200 100 L162 108 L150 145 L138 108 L100 100 L138 92 Z" fill="#F5D061"/>
+      <circle cx="150" cy="100" r="6" fill="#FFF7D6"/>
+  <rect x="4" y="4" width="292" height="192" rx="10" fill="none" stroke="#F2C14E" stroke-width="3" stroke-opacity="0.9"/>
+  <circle cx="14" cy="14" r="3" fill="#F2C14E"/>
+  <circle cx="286" cy="14" r="3" fill="#F2C14E"/>
+  <circle cx="14" cy="186" r="3" fill="#F2C14E"/>
+  <circle cx="286" cy="186" r="3" fill="#F2C14E"/>
+</svg>

@@ -1,0 +1,45 @@
+@import "tailwindcss";
+@import "tailwindcss";
+
+body {
+  background-color: #080B10;
+  color: #ffffff;
+  font-family: sans-serif;
+}
+
+@layer base {
+  body {
+    font-family: 'Montserrat', sans-serif;
+    background-color: #080B10;
+    color: #ffffff;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, .font-vip {
+    font-family: 'Cinzel', serif;
+  }
+}
+
+/* Custom Vegas Animations & Metallic Gold Gradients */
+.gold-gradient-text {
+  background: linear-gradient(135deg, #BF953F 0%, #FCF6BA 25%, #B38728 50%, #FBF5B7 75%, #AA771C 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gold-border {
+  border-image: linear-gradient(to right, #BF953F, #FCF6BA, #AA771C) 1;
+}
+
+.vivid-glow {
+  box-shadow: 0 0 25px rgba(234, 179, 8, 0.25);
+}
+
+@keyframes pulse-gold {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.02); }
+}
+
+.animate-gold-pulse {
+  animation: pulse-gold 3s infinite ease-in-out;
+}

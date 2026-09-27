@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200" viewBox="0 0 300 200">
+  <defs>
+    <linearGradient id="bg-cash-machine" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#332600"/>
+      <stop offset="100%" stop-color="#B38F00"/>
+    </linearGradient>
+    <radialGradient id="glow-cash-machine" cx="50%" cy="38%" r="65%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="300" height="200" fill="url(#bg-cash-machine)"/>
+  <rect width="300" height="200" fill="url(#glow-cash-machine)"/>
+  
+      <rect x="105" y="42" width="90" height="112" rx="8" fill="#2B2205" stroke="#F5D061" stroke-width="4"/>
+      <rect x="120" y="58" width="60" height="34" rx="3" fill="#7CE8C6"/>
+      <rect x="120" y="102" width="60" height="10" fill="#F5D061"/>
+      <rect x="125" y="128" width="50" height="8" rx="2" fill="#111"/>
+      <rect x="85" y="148" width="42" height="22" rx="2" fill="#3FA34D" stroke="#1B5E20" stroke-width="2"/>
+  <rect x="4" y="4" width="292" height="192" rx="10" fill="none" stroke="#F2C14E" stroke-width="3" stroke-opacity="0.9"/>
+  <circle cx="14" cy="14" r="3" fill="#F2C14E"/>
+  <circle cx="286" cy="14" r="3" fill="#F2C14E"/>
+  <circle cx="14" cy="186" r="3" fill="#F2C14E"/>
+  <circle cx="286" cy="186" r="3" fill="#F2C14E"/>
+</svg>
