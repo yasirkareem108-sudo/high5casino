@@ -62,6 +62,12 @@ app.get('/', (req, res) => {
   res.send('🎰 High 5 Casino API is running smoothly!');
 });
 
+// Lightweight keep-alive target for uptime monitors — no DB access, so it stays cheap.
+// (Express answers HEAD for GET routes automatically.)
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', uptime: Math.round(process.uptime()) });
+});
+
 // JSON error handler (Express 5 forwards async route rejections here)
 app.use((err, req, res, next) => {
   console.error(err);
