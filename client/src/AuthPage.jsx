@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link, Navigate } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
 import { API_BASE, safeJson } from './socket';
+import { usePlayer } from './PlayerContext';
 
 export default function AuthPage({ mode }) {
   const isRegister = mode === 'register';
+  const { user, login } = usePlayer();
   const navigate = useNavigate();
   const location = useLocation();
   const [form, setForm] = useState({ name: '', email: '', password: '' });
@@ -12,6 +14,8 @@ export default function AuthPage({ mode }) {
   const [loading, setLoading] = useState(false);
 
   const handleChange = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  if (user) return <Navigate to="/dashboard" replace />;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -28,12 +32,8 @@ export default function AuthPage({ mode }) {
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.message || 'Something went wrong');
 
-      localStorage.setItem('h5c_player_token', data.token);
-      localStorage.setItem('h5c_player_name', data.user.name);
-      localStorage.setItem('h5c_player_email', data.user.email);
-
-      const redirectTo = location.state?.from || '/';
-      navigate(redirectTo, { replace: true });
+      login(data.token, data.user);
+      navigate(location.state?.from || '/dashboard', { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {

@@ -103,14 +103,20 @@ export default function AdminDashboard() {
         );
         return next.sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
       });
-      if (update.conversationId !== selectedIdRef.current) {
+      // Only real new messages count as unread — identity-only updates carry no lastMessageText
+      if (update.lastMessageText !== undefined && update.conversationId !== selectedIdRef.current) {
         setUnreadIds((prev) => new Set(prev).add(update.conversationId));
       }
     };
     const onMessageNew = (msg) => {
       if (msg.conversationId === selectedIdRef.current) {
-        setMessages((prev) => [...prev, msg]);
+        setMessages((prev) => (prev.some((m) => m._id === msg._id) ? prev : [...prev, msg]));
       }
+    };
+    const onDepositUpdated = (u) => {
+      setMessages((prev) =>
+        prev.map((m) => (m._id === u.messageId ? { ...m, meta: { ...m.meta, status: u.status } } : m))
+      );
     };
     const onNotify = (payload) => {
       playNotifySound();
@@ -124,9 +130,11 @@ export default function AdminDashboard() {
     socket.on('conversation:new', onConversationNew);
     socket.on('conversation:update', onConversationUpdate);
     socket.on('message:new', onMessageNew);
+    socket.on('deposit:updated', onDepositUpdated);
     socket.on('admin:notify', onNotify);
 
     return () => {
+      socket.off('deposit:updated', onDepositUpdated);
       socket.off('admin:authed', onAuthed);
       socket.off('admin:auth_error', onAuthError);
       socket.off('conversation:new', onConversationNew);
@@ -214,8 +222,18 @@ export default function AdminDashboard() {
     setMessageInput('');
   };
 
-  const sendQuickReply = (text) => {
+  // Deposits created before status tracking existed have no depositId — fall back to a plain reply.
+  const decideDeposit = (message, decision) => {
     if (!selectedId) return;
+    if (message.meta?.depositId) {
+      socket.emit('admin:deposit_decision', { depositId: message.meta.depositId, decision });
+      return;
+    }
+    const game = message.meta?.game;
+    const text =
+      decision === 'approved'
+        ? `✅ Your $${Number(message.meta?.amount).toFixed(2)} deposit for ${game} has been approved and credited. Enjoy!`
+        : `❌ Your deposit request for ${game} could not be verified. Please reach out here with more details.`;
     socket.emit('admin:message', { conversationId: selectedId, text });
   };
 
@@ -390,20 +408,26 @@ export default function AdminDashboard() {
                       <div className="flex justify-between gap-3"><span className="text-gray-500 shrink-0">Game</span><span className="text-white font-semibold text-right break-words min-w-0">{m.meta?.game}</span></div>
                       <div className="flex justify-between gap-3"><span className="text-gray-500 shrink-0">Method</span><span className="text-white font-semibold text-right break-words min-w-0">{m.meta?.method}</span></div>
                       <div className="flex justify-between gap-3"><span className="text-gray-500 shrink-0">Amount</span><span className="text-emerald-400 font-bold">${Number(m.meta?.amount).toFixed(2)}</span></div>
-                      <div className="flex gap-2 pt-2">
-                        <button
-                          onClick={() => sendQuickReply(`✅ Your $${Number(m.meta?.amount).toFixed(2)} deposit for ${m.meta?.game} has been approved and credited. Enjoy!`)}
-                          className="flex-1 flex items-center justify-center gap-1 py-2.5 md:py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-[11px] md:text-[10px] font-bold hover:bg-emerald-500/25 transition-all"
-                        >
-                          <CheckCircle2 size={12} /> Approve
-                        </button>
-                        <button
-                          onClick={() => sendQuickReply(`❌ Your deposit request for ${m.meta?.game} could not be verified. Please reach out here with more details.`)}
-                          className="flex-1 flex items-center justify-center gap-1 py-2.5 md:py-1.5 rounded-lg bg-red-500/15 border border-red-500/40 text-red-400 text-[11px] md:text-[10px] font-bold hover:bg-red-500/25 transition-all"
-                        >
-                          <XCircle size={12} /> Reject
-                        </button>
-                      </div>
+                      {m.meta?.status === 'approved' || m.meta?.status === 'rejected' ? (
+                        <p className={`pt-2 font-bold ${m.meta.status === 'approved' ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {m.meta.status === 'approved' ? '✅ Approved' : '❌ Rejected'}
+                        </p>
+                      ) : (
+                        <div className="flex gap-2 pt-2">
+                          <button
+                            onClick={() => decideDeposit(m, 'approved')}
+                            className="flex-1 flex items-center justify-center gap-1 py-2.5 md:py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-[11px] md:text-[10px] font-bold hover:bg-emerald-500/25 transition-all"
+                          >
+                            <CheckCircle2 size={12} /> Approve
+                          </button>
+                          <button
+                            onClick={() => decideDeposit(m, 'rejected')}
+                            className="flex-1 flex items-center justify-center gap-1 py-2.5 md:py-1.5 rounded-lg bg-red-500/15 border border-red-500/40 text-red-400 text-[11px] md:text-[10px] font-bold hover:bg-red-500/25 transition-all"
+                          >
+                            <XCircle size={12} /> Reject
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ) : m.type === 'image' ? (
                     <img

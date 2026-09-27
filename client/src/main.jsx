@@ -5,15 +5,20 @@ import './index.css'
 import App from './App.jsx'
 import AdminDashboard from './AdminDashboard.jsx'
 import AuthPage from './AuthPage.jsx'
+import Dashboard from './Dashboard.jsx'
+import { PlayerShell } from './PlayerContext.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<App />} />
+        <Route element={<PlayerShell />}>
+          <Route path="/" element={<App />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/login" element={<AuthPage mode="login" />} />
+          <Route path="/register" element={<AuthPage mode="register" />} />
+        </Route>
         <Route path="/admin" element={<AdminDashboard />} />
-        <Route path="/login" element={<AuthPage mode="login" />} />
-        <Route path="/register" element={<AuthPage mode="register" />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>,

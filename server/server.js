@@ -9,6 +9,7 @@ const connectDB = require('./config/db');
 const chatRoutes = require('./routes/chatRoutes');
 const authRoutes = require('./routes/authRoutes');
 const pushRoutes = require('./routes/pushRoutes');
+const playerRoutes = require('./routes/playerRoutes');
 const registerChatHandlers = require('./socket/chatSocket');
 
 dotenv.config();
@@ -35,6 +36,9 @@ app.use('/api', chatRoutes);
 
 // Player auth (register/login)
 app.use('/api/auth', authRoutes);
+
+// Logged-in player's own profile + deposit history
+app.use('/api/me', playerRoutes);
 
 // Web Push (VAPID) subscription management
 app.use('/api/push', pushRoutes);

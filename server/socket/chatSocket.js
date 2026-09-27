@@ -1,13 +1,66 @@
 const jwt = require('jsonwebtoken');
 const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
+const User = require('../models/User');
+const Deposit = require('../models/Deposit');
 const { notifyAdmins } = require('../services/push');
 
+const OBJECT_ID = /^[a-f0-9]{24}$/;
+const UPLOAD_URL = /^\/uploads\/[\w.-]+$/;
+const MAX_TEXT = 2000;
+
+// One conversation per player account, keyed by the account's permanent Mongo _id.
+// Older threads were keyed by a random per-browser id; if one of those carries the
+// same email as this account we adopt it, so pre-account history isn't lost.
+async function getOrCreateConversation(user) {
+  const userId = user._id.toString();
+
+  let conversation = await Conversation.findOne({ userId });
+  if (conversation) {
+    const changed = conversation.userName !== user.name || conversation.email !== user.email;
+    if (changed) {
+      conversation.userName = user.name;
+      conversation.email = user.email;
+      await conversation.save();
+    }
+    return { conversation, created: false, changed };
+  }
+
+  conversation = await Conversation.findOneAndUpdate(
+    { email: user.email, userId: { $not: OBJECT_ID } },
+    { $set: { userId, userName: user.name } },
+    { sort: { lastMessageAt: -1 }, new: true }
+  );
+  if (conversation) return { conversation, created: false, changed: true };
+
+  try {
+    conversation = await Conversation.create({ userId, userName: user.name, email: user.email });
+    return { conversation, created: true, changed: false };
+  } catch (err) {
+    // Two tabs joining at once: the unique index on userId means only one create wins.
+    if (err.code === 11000) {
+      return { conversation: await Conversation.findOne({ userId }), created: false, changed: false };
+    }
+    throw err;
+  }
+}
+
 function registerChatHandlers(io) {
+  // Persists a message, bumps the conversation preview, and fans it out.
+  async function publish(conversationId, fields, preview) {
+    const message = await Message.create({ conversationId, ...fields });
+    const lastMessageAt = new Date();
+    await Conversation.findByIdAndUpdate(conversationId, { lastMessageText: preview, lastMessageAt });
+
+    io.to(`conv:${conversationId}`).emit('message:new', message);
+    io.to('admins').emit('conversation:update', { conversationId, lastMessageText: preview, lastMessageAt });
+    return message;
+  }
+
   io.on('connection', (socket) => {
     socket.isAdmin = false;
 
-    // Admin dashboard authenticates its socket with the JWT from login
+    // ---- Admin ----------------------------------------------------------
     socket.on('admin:auth', (token) => {
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -20,141 +73,179 @@ function registerChatHandlers(io) {
       }
     });
 
-    // Player opens the support chat widget — find or create their conversation
-    socket.on('user:join', async ({ userId, userName }) => {
-      if (!userId) return;
-      try {
-        let conversation = await Conversation.findOne({ userId });
-        if (!conversation) {
-          conversation = await Conversation.create({ userId, userName: userName || 'Guest' });
-          io.to('admins').emit('conversation:new', conversation);
-        }
-        socket.conversationId = conversation._id.toString();
-        socket.join(`conv:${conversation._id}`);
-        const messages = await Message.find({ conversationId: conversation._id }).sort({ createdAt: 1 });
-        socket.emit('user:joined', { conversationId: conversation._id, messages });
-      } catch (err) {
-        socket.emit('error:message', 'Could not start conversation');
-      }
-    });
-
-    // Admin opens a specific conversation from the inbox list
     socket.on('admin:join_conversation', (conversationId) => {
-      if (!socket.isAdmin || !conversationId) return;
+      if (!socket.isAdmin || !OBJECT_ID.test(String(conversationId))) return;
       socket.join(`conv:${conversationId}`);
     });
 
-    // Once a player logs in, attach their real name/email to their existing conversation
-    socket.on('user:identify', async ({ userId, name, email }) => {
-      if (!userId || !name || !email) return;
+    socket.on('admin:message', async ({ conversationId, text, imageUrl } = {}) => {
+      if (!socket.isAdmin || !OBJECT_ID.test(String(conversationId))) return;
+      const cleanText = typeof text === 'string' ? text.trim().slice(0, MAX_TEXT) : '';
+      const cleanImage = typeof imageUrl === 'string' && UPLOAD_URL.test(imageUrl) ? imageUrl : '';
+      if (!cleanText && !cleanImage) return;
       try {
-        const conversation = await Conversation.findOneAndUpdate(
-          { userId },
-          { userName: name, email },
-          { new: true }
+        await publish(
+          conversationId,
+          { sender: 'admin', type: cleanImage ? 'image' : 'text', text: cleanText, imageUrl: cleanImage },
+          cleanImage ? '📷 Image' : cleanText
         );
-        if (conversation) {
-          io.to('admins').emit('conversation:update', {
-            conversationId: conversation._id,
-            userName: conversation.userName,
-            email: conversation.email,
-            lastMessageText: conversation.lastMessageText,
-            lastMessageAt: conversation.lastMessageAt,
-          });
-        }
-      } catch (err) {
-        // non-critical — chat still works under the previous name
-      }
-    });
-
-    socket.on('user:message', async ({ conversationId, text, imageUrl, meta, type }) => {
-      if (!conversationId) return;
-      try {
-        const conversation = await Conversation.findById(conversationId);
-        if (!conversation) return;
-
-        const resolvedType = type || (meta ? 'deposit_card' : imageUrl ? 'image' : 'text');
-        // Attach whatever identity the conversation currently has (guest or logged-in) to deposit cards
-        const enrichedMeta =
-          resolvedType === 'deposit_card'
-            ? { ...meta, name: conversation.userName, email: conversation.email || null }
-            : meta || null;
-
-        const message = await Message.create({
-          conversationId,
-          sender: 'user',
-          type: resolvedType,
-          text: text || '',
-          imageUrl: imageUrl || '',
-          meta: enrichedMeta,
-        });
-
-        const preview =
-          resolvedType === 'deposit_card' ? `💳 Deposit request: $${meta?.amount}` : imageUrl ? '📷 Image' : text;
-
-        conversation.lastMessageText = preview;
-        conversation.lastMessageAt = new Date();
-        await conversation.save();
-
-        io.to(`conv:${conversationId}`).emit('message:new', message);
-        io.to('admins').emit('conversation:update', {
-          conversationId,
-          lastMessageText: preview,
-          lastMessageAt: new Date(),
-        });
-
-        // Dedicated ping for deposit requests so the admin dashboard can toast + play a sound
-        if (resolvedType === 'deposit_card') {
-          io.to('admins').emit('admin:notify', {
-            conversationId,
-            userName: conversation.userName,
-            email: conversation.email || null,
-            game: meta?.game,
-            amount: meta?.amount,
-          });
-        }
-
-        // Web Push — reaches the admin even if the dashboard tab isn't open/focused
-        const pushTitle =
-          resolvedType === 'deposit_card'
-            ? `💳 Deposit request — ${conversation.userName}`
-            : `New message from ${conversation.userName}`;
-        const pushBody =
-          resolvedType === 'deposit_card'
-            ? `$${meta?.amount} via ${meta?.method} for ${meta?.game}`
-            : imageUrl
-              ? '📷 Sent an image'
-              : text;
-        notifyAdmins({ title: pushTitle, body: pushBody, url: '/admin', conversationId }).catch(() => {});
       } catch (err) {
         socket.emit('error:message', 'Could not send message');
       }
     });
 
-    socket.on('admin:message', async ({ conversationId, text, imageUrl }) => {
-      if (!socket.isAdmin || !conversationId) return;
+    // Approve/reject a deposit: updates the Deposit record, the card in the chat,
+    // and posts the admin's reply. findOneAndUpdate on status:'pending' makes a
+    // double-click (or two admins) decide it exactly once.
+    socket.on('admin:deposit_decision', async ({ depositId, decision } = {}) => {
+      if (!socket.isAdmin || !OBJECT_ID.test(String(depositId))) return;
+      if (!['approved', 'rejected'].includes(decision)) return;
       try {
-        const message = await Message.create({
+        const deposit = await Deposit.findOneAndUpdate(
+          { _id: depositId, status: 'pending' },
+          { status: decision, decidedAt: new Date() },
+          { new: true }
+        );
+        if (!deposit) {
+          socket.emit('error:message', 'That deposit was already decided');
+          return;
+        }
+
+        await Message.updateOne({ _id: deposit.messageId }, { $set: { 'meta.status': decision } });
+        io.to(`conv:${deposit.conversationId}`)
+          .to('admins')
+          .emit('deposit:updated', {
+            depositId: deposit._id,
+            messageId: deposit.messageId,
+            conversationId: deposit.conversationId,
+            status: decision,
+          });
+
+        const amount = deposit.amount.toFixed(2);
+        const reply =
+          decision === 'approved'
+            ? `✅ Your $${amount} deposit for ${deposit.game} has been approved and credited. Enjoy!`
+            : `❌ Your deposit request for ${deposit.game} could not be verified. Please reach out here with more details.`;
+        await publish(deposit.conversationId, { sender: 'admin', type: 'text', text: reply }, reply);
+      } catch (err) {
+        socket.emit('error:message', 'Could not update deposit');
+      }
+    });
+
+    // ---- Player ---------------------------------------------------------
+    // Identity comes from the verified JWT, never from anything the client claims.
+    socket.on('user:join', async ({ token } = {}) => {
+      let user = null;
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        if (decoded.role !== 'player') throw new Error('Not a player token');
+        user = await User.findById(decoded.userId);
+      } catch (err) {
+        user = null;
+      }
+      if (!user) {
+        socket.emit('user:auth_error', 'Please log in again');
+        return;
+      }
+
+      try {
+        const { conversation, created, changed } = await getOrCreateConversation(user);
+        socket.playerUserId = user._id.toString();
+        socket.playerConversationId = conversation._id.toString();
+        socket.join(`conv:${conversation._id}`);
+
+        if (created) {
+          io.to('admins').emit('conversation:new', conversation);
+        } else if (changed) {
+          io.to('admins').emit('conversation:update', {
+            conversationId: conversation._id,
+            userName: conversation.userName,
+            email: conversation.email,
+          });
+        }
+
+        const messages = await Message.find({ conversationId: conversation._id }).sort({ createdAt: 1 });
+        socket.emit('user:joined', { conversationId: conversation._id, messages });
+      } catch (err) {
+        socket.emit('error:message', 'Could not load your conversation');
+      }
+    });
+
+    socket.on('user:message', async ({ text, imageUrl, meta, type } = {}) => {
+      const conversationId = socket.playerConversationId;
+      if (!conversationId) return;
+
+      try {
+        const conversation = await Conversation.findById(conversationId);
+        if (!conversation) return;
+
+        if (type === 'deposit_card') {
+          const amount = Number(meta?.amount);
+          const game = typeof meta?.game === 'string' ? meta.game.trim().slice(0, 60) : '';
+          const method = typeof meta?.method === 'string' ? meta.method.trim().slice(0, 40) : '';
+          if (!game || !method || !Number.isFinite(amount) || amount <= 0 || amount > 1000000) {
+            socket.emit('error:message', 'Invalid deposit request');
+            return;
+          }
+
+          const deposit = await Deposit.create({
+            user: socket.playerUserId,
+            conversationId,
+            game,
+            method,
+            amount,
+          });
+          const message = await publish(
+            conversationId,
+            {
+              sender: 'user',
+              type: 'deposit_card',
+              meta: {
+                game,
+                method,
+                amount,
+                name: conversation.userName,
+                email: conversation.email || null,
+                depositId: deposit._id.toString(),
+                status: 'pending',
+              },
+            },
+            `💳 Deposit request: $${amount}`
+          );
+          deposit.messageId = message._id;
+          await deposit.save();
+
+          io.to('admins').emit('admin:notify', {
+            conversationId,
+            userName: conversation.userName,
+            email: conversation.email || null,
+            game,
+            amount,
+          });
+          notifyAdmins({
+            title: `💳 Deposit request — ${conversation.userName}`,
+            body: `$${amount} via ${method} for ${game}`,
+            url: '/admin',
+            conversationId,
+          }).catch(() => {});
+          return;
+        }
+
+        const cleanText = typeof text === 'string' ? text.trim().slice(0, MAX_TEXT) : '';
+        const cleanImage = typeof imageUrl === 'string' && UPLOAD_URL.test(imageUrl) ? imageUrl : '';
+        if (!cleanText && !cleanImage) return;
+
+        await publish(
           conversationId,
-          sender: 'admin',
-          type: imageUrl ? 'image' : 'text',
-          text: text || '',
-          imageUrl: imageUrl || '',
-        });
-
-        const preview = imageUrl ? '📷 Image' : text;
-
-        await Conversation.findByIdAndUpdate(conversationId, {
-          lastMessageText: preview,
-          lastMessageAt: new Date(),
-        });
-
-        io.to(`conv:${conversationId}`).emit('message:new', message);
-        io.to('admins').emit('conversation:update', {
+          { sender: 'user', type: cleanImage ? 'image' : 'text', text: cleanText, imageUrl: cleanImage },
+          cleanImage ? '📷 Image' : cleanText
+        );
+        notifyAdmins({
+          title: `New message from ${conversation.userName}`,
+          body: cleanImage ? '📷 Sent an image' : cleanText,
+          url: '/admin',
           conversationId,
-          lastMessageText: preview,
-          lastMessageAt: new Date(),
-        });
+        }).catch(() => {});
       } catch (err) {
         socket.emit('error:message', 'Could not send message');
       }

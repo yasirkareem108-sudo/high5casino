@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Home, Gamepad2, Dices, Flame, Trophy, Wallet, ArrowUpRight,
-  MessageSquare, User, Search, LogIn, UserPlus, Sparkles, Gift, Crown,
-  Play, Volume2, ShieldCheck, Zap, X, Landmark, Send, Smartphone,
-  CreditCard, DollarSign, Bitcoin, Clock, Paperclip, Loader2, LogOut, Menu
+  MessageSquare, User, Search, LogIn, UserPlus, Sparkles, Crown,
+  Play, Volume2, Zap, X, Landmark, Send, Smartphone,
+  CreditCard, DollarSign, Bitcoin, Clock, LogOut, Menu, LayoutDashboard
 } from 'lucide-react';
-import { socket, API_BASE, safeJson } from './socket';
+import { usePlayer } from './PlayerContext';
+import ChatWidget from './ChatWidget';
 
 const NAV_ITEMS = [
   { name: 'Lobby Home', icon: Home, tab: 'all' },
@@ -16,24 +17,6 @@ const NAV_ITEMS = [
   { name: 'Arcade Arena', icon: Dices, tab: 'arcade' },
   { name: 'VIP Tables', icon: Trophy, tab: 'table' },
 ];
-
-function getOrCreateUserId() {
-  let uid = localStorage.getItem('h5c_uid');
-  if (!uid) {
-    uid = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    localStorage.setItem('h5c_uid', uid);
-  }
-  return uid;
-}
-
-function getOrCreateUserName(uid) {
-  let name = localStorage.getItem('h5c_uname');
-  if (!name) {
-    name = `Guest-${uid.slice(0, 4).toUpperCase()}`;
-    localStorage.setItem('h5c_uname', name);
-  }
-  return name;
-}
 
 const CATEGORY_LABELS = {
   fish: 'Fish Games',
@@ -62,28 +45,15 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // Player account (register/login) — required before depositing
-  const [player, setPlayer] = useState(() => {
-    const name = localStorage.getItem('h5c_player_name');
-    const email = localStorage.getItem('h5c_player_email');
-    return name && email ? { name, email } : null;
-  });
+  // Account + persistent chat thread live in PlayerContext (shared with the dashboard)
+  const { user: player, logout, setChatOpen, sendDeposit } = usePlayer();
 
-  // Mock Deposit Flow — the summary card is sent as a real chat message,
+  // Mock Deposit Flow — the summary card is sent into the player's chat thread,
   // no real payment is ever processed
   const [depositGame, setDepositGame] = useState(null);
   const [depositStep, setDepositStep] = useState('form');
   const [selectedMethod, setSelectedMethod] = useState(null);
   const [amount, setAmount] = useState('');
-
-  // General Support Live Chat — real-time via Socket.io, backed by MongoDB
-  const [chatOpen, setChatOpen] = useState(false);
-  const [chatMessages, setChatMessages] = useState([]);
-  const [chatInput, setChatInput] = useState('');
-  const [chatUploading, setChatUploading] = useState(false);
-  const conversationIdRef = useRef(null);
-  const chatScrollRef = useRef(null);
-  const chatFileInputRef = useRef(null);
 
   // Live Progressive Jackpot Motion
   useEffect(() => {
@@ -93,48 +63,9 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Join (or resume) this player's support conversation on the backend
-  useEffect(() => {
-    const uid = getOrCreateUserId();
-    const uname = getOrCreateUserName(uid);
-
-    const join = () => socket.emit('user:join', { userId: uid, userName: uname });
-    if (socket.connected) join();
-    socket.on('connect', join);
-
-    const onJoined = ({ conversationId, messages }) => {
-      conversationIdRef.current = conversationId;
-      setChatMessages(messages);
-      // If already logged in, attach the real name/email to this conversation
-      const loggedInName = localStorage.getItem('h5c_player_name');
-      const loggedInEmail = localStorage.getItem('h5c_player_email');
-      if (loggedInName && loggedInEmail) {
-        socket.emit('user:identify', { userId: uid, name: loggedInName, email: loggedInEmail });
-      }
-    };
-    const onMessageNew = (msg) => {
-      if (msg.conversationId === conversationIdRef.current) {
-        setChatMessages((prev) => [...prev, msg]);
-      }
-    };
-
-    socket.on('user:joined', onJoined);
-    socket.on('message:new', onMessageNew);
-
-    return () => {
-      socket.off('connect', join);
-      socket.off('user:joined', onJoined);
-      socket.off('message:new', onMessageNew);
-    };
-  }, []);
-
-  useEffect(() => {
-    chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [chatMessages]);
-
   const openDeposit = (game) => {
     if (!player) {
-      navigate('/login', { state: { from: '/' } });
+      navigate('/login');
       return;
     }
     setDepositGame(game);
@@ -143,67 +74,25 @@ export default function App() {
     setAmount('');
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('h5c_player_token');
-    localStorage.removeItem('h5c_player_name');
-    localStorage.removeItem('h5c_player_email');
-    setPlayer(null);
-  };
-
   const closeDeposit = () => {
     setDepositGame(null);
   };
 
+  // The request goes into this player's own persistent thread and creates a tracked Deposit.
   const handleDepositSubmit = (e) => {
     e.preventDefault();
     if (!selectedMethod || !amount || Number(amount) <= 0) return;
-    // Internal reference only — not shown in the UI since no real payment is processed
-    const fakeTxId = `DEP-${Date.now().toString().slice(-6)}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
     setDepositStep('pending');
-
-    socket.emit('user:message', {
-      conversationId: conversationIdRef.current,
-      type: 'deposit_card',
-      meta: {
-        game: depositGame.name,
-        method: PAYMENT_METHODS.find((m) => m.id === selectedMethod)?.name,
-        amount: Number(amount),
-        transactionId: fakeTxId,
-      },
+    sendDeposit({
+      game: depositGame.name,
+      method: PAYMENT_METHODS.find((m) => m.id === selectedMethod)?.name,
+      amount: Number(amount),
     });
   };
 
   const goToChat = () => {
     closeDeposit();
     setChatOpen(true);
-  };
-
-  const sendChatMessage = (e) => {
-    e.preventDefault();
-    const text = chatInput.trim();
-    if (!text || !conversationIdRef.current) return;
-    socket.emit('user:message', { conversationId: conversationIdRef.current, text });
-    setChatInput('');
-  };
-
-  const handleChatImageUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file || !conversationIdRef.current) return;
-    setChatUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await fetch(`${API_BASE}/api/upload`, { method: 'POST', body: formData });
-      const data = await safeJson(res);
-      if (data.url) {
-        socket.emit('user:message', { conversationId: conversationIdRef.current, imageUrl: data.url });
-      }
-    } catch {
-      // upload failed silently — demo scope
-    } finally {
-      setChatUploading(false);
-      if (chatFileInputRef.current) chatFileInputRef.current.value = '';
-    }
   };
 
   const games = [
@@ -297,12 +186,16 @@ export default function App() {
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {player ? (
             <>
-              <div className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#131824] border border-gray-700/80">
+              <Link
+                to="/dashboard"
+                aria-label="My dashboard"
+                className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#131824] border border-gray-700/80 hover:border-amber-500/50 transition-all"
+              >
                 <User size={14} className="text-amber-400 shrink-0" />
                 <span className="hidden sm:block text-xs font-bold text-white max-w-[8rem] truncate">{player.name}</span>
-              </div>
+              </Link>
               <button
-                onClick={handleLogout}
+                onClick={logout}
                 aria-label="Logout"
                 className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-bold bg-[#131824] border border-gray-700/80 hover:border-red-500/50 hover:text-red-400 transition-all"
               >
@@ -364,6 +257,12 @@ export default function App() {
             })}
             <div className="pt-4 mt-3 border-t border-gray-800/80 flex flex-col gap-1">
               <span className="text-[10px] font-extrabold uppercase tracking-widest text-gray-500 px-3 mb-1">Account Action</span>
+              <button
+                onClick={() => navigate(player ? '/dashboard' : '/login')}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold text-gray-300 hover:bg-[#131824] hover:text-amber-400 transition-all"
+              >
+                <LayoutDashboard size={18} /> {player ? 'My Dashboard' : 'Login / Dashboard'}
+              </button>
               <button className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold text-gray-300 hover:bg-[#131824] hover:text-amber-400 transition-all">
                 <Wallet size={18} /> Fast Deposit
               </button>
@@ -417,6 +316,12 @@ export default function App() {
                 <div className="text-[10px] font-extrabold uppercase tracking-widest text-gray-500 px-3 mb-2">
                   Account Action
                 </div>
+                <button
+                  onClick={() => navigate(player ? '/dashboard' : '/login')}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-gray-400 hover:bg-[#131824] hover:text-amber-400 transition-all"
+                >
+                  <LayoutDashboard size={16} /> {player ? 'My Dashboard' : 'Login / Dashboard'}
+                </button>
                 <button className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-gray-400 hover:bg-[#131824] hover:text-amber-400 transition-all">
                   <Wallet size={16} /> Fast Deposit
                 </button>
@@ -719,92 +624,7 @@ export default function App() {
         </div>
       )}
 
-      {/* General Support Live Chat — separate widget, no financial info discussed here */}
-      <button
-        onClick={() => setChatOpen((o) => !o)}
-        className="fixed bottom-5 right-5 z-40 w-14 h-14 rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 text-black flex items-center justify-center shadow-2xl shadow-amber-500/30 hover:scale-105 transition-all"
-      >
-        {chatOpen ? <X size={22} /> : <MessageSquare size={22} />}
-      </button>
-
-      {chatOpen && (
-        <div className="fixed bottom-24 left-3 right-3 sm:left-auto sm:right-5 z-40 sm:w-80 h-[min(70dvh,480px)] sm:h-[420px] bg-[#0D111A] border border-gray-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
-          <div className="bg-[#131824] border-b border-gray-800 px-4 py-3 flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
-                <MessageSquare size={14} className="text-amber-400" />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-white">24/7 Live Support</p>
-                <p className="text-[10px] text-emerald-400">● Online</p>
-              </div>
-            </div>
-            <button onClick={() => setChatOpen(false)} className="text-gray-400 hover:text-white">
-              <X size={16} />
-            </button>
-          </div>
-
-          <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-3 space-y-2">
-            {chatMessages.length === 0 && (
-              <div className="text-[11px] text-gray-500 text-center mt-2">
-                👋 Welcome! Ask us anything, or click a game to start a deposit.
-              </div>
-            )}
-            {chatMessages.map((m) => (
-              <div key={m._id || m.createdAt} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                {m.type === 'deposit_card' ? (
-                  <div className="max-w-[85%] bg-[#131824] border border-amber-500/30 rounded-xl p-3 text-[11px] space-y-1">
-                    <p className="text-amber-400 font-black uppercase text-[9px] tracking-wide mb-1">💳 Deposit Request</p>
-                    <div className="flex justify-between"><span className="text-gray-500">Game</span><span className="text-white font-semibold">{m.meta?.game}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-500">Method</span><span className="text-white font-semibold">{m.meta?.method}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-500">Amount</span><span className="text-emerald-400 font-bold">${Number(m.meta?.amount).toFixed(2)}</span></div>
-                    <p className="text-gray-500 pt-1 border-t border-gray-800 mt-1">⏳ Pending review</p>
-                  </div>
-                ) : m.type === 'image' ? (
-                  <img src={`${API_BASE}${m.imageUrl}`} alt="attachment" className="max-w-[75%] rounded-xl border border-gray-800" />
-                ) : (
-                  <div
-                    className={`max-w-[80%] px-3 py-2 rounded-xl text-xs ${
-                      m.sender === 'admin' ? 'bg-[#131824] text-gray-200' : 'bg-amber-500 text-black'
-                    }`}
-                  >
-                    {m.text}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <form onSubmit={sendChatMessage} className="border-t border-gray-800 p-2 flex gap-2 shrink-0">
-            <input
-              ref={chatFileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleChatImageUpload}
-              className="hidden"
-              id="chat-file-upload"
-            />
-            <label
-              htmlFor="chat-file-upload"
-              className="w-9 h-9 shrink-0 rounded-lg bg-[#131824] border border-gray-800 flex items-center justify-center text-gray-400 hover:text-amber-400 hover:border-amber-500/50 cursor-pointer transition-all"
-            >
-              {chatUploading ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />}
-            </label>
-            <input
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              placeholder="Type a message..."
-              className="flex-1 min-w-0 bg-[#131824] border border-gray-800 rounded-lg px-3 py-2 text-base sm:text-xs text-white focus:outline-none focus:border-amber-500/60"
-            />
-            <button type="submit" aria-label="Send" className="w-9 h-9 shrink-0 rounded-lg bg-amber-500 text-black flex items-center justify-center">
-              <Send size={14} />
-            </button>
-          </form>
-          <p className="text-[9px] text-gray-600 text-center pb-2 shrink-0">
-            General support only — no financial or account info is exchanged here.
-          </p>
-        </div>
-      )}
+      <ChatWidget />
     </div>
   );
 }
