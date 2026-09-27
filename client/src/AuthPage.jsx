@@ -65,7 +65,7 @@ export default function AuthPage({ mode }) {
               required
               value={form.name}
               onChange={handleChange('name')}
-              className="w-full bg-[#131824] border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/80"
+              className="w-full bg-[#131824] border border-gray-800 rounded-xl px-4 py-2.5 text-base sm:text-sm text-white focus:outline-none focus:border-amber-500/80"
             />
           )}
           <input
@@ -74,7 +74,7 @@ export default function AuthPage({ mode }) {
             required
             value={form.email}
             onChange={handleChange('email')}
-            className="w-full bg-[#131824] border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/80"
+            className="w-full bg-[#131824] border border-gray-800 rounded-xl px-4 py-2.5 text-base sm:text-sm text-white focus:outline-none focus:border-amber-500/80"
           />
           <input
             type="password"
@@ -83,7 +83,7 @@ export default function AuthPage({ mode }) {
             minLength={6}
             value={form.password}
             onChange={handleChange('password')}
-            className="w-full bg-[#131824] border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/80"
+            className="w-full bg-[#131824] border border-gray-800 rounded-xl px-4 py-2.5 text-base sm:text-sm text-white focus:outline-none focus:border-amber-500/80"
           />
 
           {error && <p className="text-[11px] text-red-400">{error}</p>}

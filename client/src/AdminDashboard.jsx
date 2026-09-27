@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  LogOut, Send, Paperclip, Inbox, CheckCircle2, XCircle, Loader2, ShieldCheck, Bell, X,
+  LogOut, Send, Paperclip, Inbox, CheckCircle2, XCircle, Loader2, ShieldCheck, Bell, X, ArrowLeft,
 } from 'lucide-react';
 import { socket, API_BASE, safeJson } from './socket';
 import { subscribeAdminToPush } from './push';
@@ -253,14 +253,14 @@ export default function AdminDashboard() {
               placeholder="Username"
               value={loginForm.username}
               onChange={(e) => setLoginForm((f) => ({ ...f, username: e.target.value }))}
-              className="w-full bg-[#131824] border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/80"
+              className="w-full bg-[#131824] border border-gray-800 rounded-xl px-4 py-2.5 text-base sm:text-sm text-white focus:outline-none focus:border-amber-500/80"
             />
             <input
               type="password"
               placeholder="Password"
               value={loginForm.password}
               onChange={(e) => setLoginForm((f) => ({ ...f, password: e.target.value }))}
-              className="w-full bg-[#131824] border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/80"
+              className="w-full bg-[#131824] border border-gray-800 rounded-xl px-4 py-2.5 text-base sm:text-sm text-white focus:outline-none focus:border-amber-500/80"
             />
             {loginError && <p className="text-[11px] text-red-400">{loginError}</p>}
             <button
@@ -279,9 +279,9 @@ export default function AdminDashboard() {
   const selectedConv = conversations.find((c) => c._id === selectedId);
 
   return (
-    <div className="h-screen bg-[#07090E] text-white flex font-sans overflow-hidden">
+    <div className="h-dvh bg-[#07090E] text-white flex font-sans overflow-hidden">
       {/* New Deposit Notifications */}
-      <div className="fixed top-4 right-4 z-[200] flex flex-col gap-2 w-80 max-w-[90vw]">
+      <div className="fixed top-3 right-3 left-3 sm:left-auto sm:top-4 sm:right-4 z-[200] flex flex-col gap-2 sm:w-80">
         {toasts.map((t) => (
           <button
             key={t.id}
@@ -312,14 +312,16 @@ export default function AdminDashboard() {
       </div>
 
       {/* Conversation List */}
-      <aside className="w-72 bg-[#0D111A] border-r border-gray-800/80 flex flex-col shrink-0">
+      <aside
+        className={`${selectedId ? 'hidden md:flex' : 'flex'} w-full md:w-72 bg-[#0D111A] md:border-r border-gray-800/80 flex-col shrink-0 min-w-0`}
+      >
         <div className="px-4 py-3 border-b border-gray-800/80 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Inbox size={16} className="text-amber-400" />
             <h2 className="text-xs font-black uppercase tracking-wide">Support Inbox</h2>
           </div>
-          <button onClick={handleLogout} className="text-gray-400 hover:text-white">
-            <LogOut size={14} />
+          <button onClick={handleLogout} aria-label="Log out" className="p-2 -mr-2 text-gray-400 hover:text-white">
+            <LogOut size={16} />
           </button>
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -348,47 +350,56 @@ export default function AdminDashboard() {
       </aside>
 
       {/* Message Thread */}
-      <main className="flex-1 flex flex-col">
+      <main className={`${selectedId ? 'flex' : 'hidden md:flex'} flex-1 flex-col min-w-0`}>
         {!selectedId ? (
           <div className="flex-1 flex items-center justify-center text-gray-600 text-sm">
             Select a conversation to start chatting
           </div>
         ) : (
           <>
-            <div className="px-5 py-3 border-b border-gray-800/80 bg-[#0D111A]">
-              <p className="text-sm font-bold text-white">{selectedConv?.userName}</p>
-              <p className="text-[10px] text-gray-500">
-                {selectedConv?.email || `Guest — ${selectedConv?.userId}`}
-              </p>
+            <div className="px-3 md:px-5 py-3 border-b border-gray-800/80 bg-[#0D111A] flex items-center gap-2">
+              <button
+                onClick={() => setSelectedId(null)}
+                aria-label="Back to inbox"
+                className="md:hidden p-2 -ml-1 text-gray-300 hover:text-white shrink-0"
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-white truncate">{selectedConv?.userName}</p>
+                <p className="text-[10px] text-gray-500 truncate">
+                  {selectedConv?.email || `Guest — ${selectedConv?.userId}`}
+                </p>
+              </div>
             </div>
 
-            <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-3">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 md:p-5 space-y-3">
               {messages.map((m) => (
                 <div key={m._id} className={`flex ${m.sender === 'admin' ? 'justify-end' : 'justify-start'}`}>
                   {m.type === 'deposit_card' ? (
-                    <div className="max-w-[75%] bg-[#131824] border border-amber-500/30 rounded-xl p-3 text-xs space-y-1.5">
+                    <div className="w-full max-w-[92%] md:max-w-sm bg-[#131824] border border-amber-500/30 rounded-xl p-3 text-xs space-y-1.5">
                       <p className="text-amber-400 font-black uppercase text-[10px] tracking-wide mb-1">
                         💳 Deposit Request
                       </p>
                       {m.meta?.name && (
-                        <div className="flex justify-between"><span className="text-gray-500">Player</span><span className="text-white font-semibold">{m.meta.name}</span></div>
+                        <div className="flex justify-between gap-3"><span className="text-gray-500 shrink-0">Player</span><span className="text-white font-semibold text-right break-words min-w-0">{m.meta.name}</span></div>
                       )}
                       {m.meta?.email && (
-                        <div className="flex justify-between"><span className="text-gray-500">Email</span><span className="text-white font-semibold">{m.meta.email}</span></div>
+                        <div className="flex justify-between gap-3"><span className="text-gray-500 shrink-0">Email</span><span className="text-white font-semibold text-right break-all min-w-0">{m.meta.email}</span></div>
                       )}
-                      <div className="flex justify-between"><span className="text-gray-500">Game</span><span className="text-white font-semibold">{m.meta?.game}</span></div>
-                      <div className="flex justify-between"><span className="text-gray-500">Method</span><span className="text-white font-semibold">{m.meta?.method}</span></div>
-                      <div className="flex justify-between"><span className="text-gray-500">Amount</span><span className="text-emerald-400 font-bold">${Number(m.meta?.amount).toFixed(2)}</span></div>
+                      <div className="flex justify-between gap-3"><span className="text-gray-500 shrink-0">Game</span><span className="text-white font-semibold text-right break-words min-w-0">{m.meta?.game}</span></div>
+                      <div className="flex justify-between gap-3"><span className="text-gray-500 shrink-0">Method</span><span className="text-white font-semibold text-right break-words min-w-0">{m.meta?.method}</span></div>
+                      <div className="flex justify-between gap-3"><span className="text-gray-500 shrink-0">Amount</span><span className="text-emerald-400 font-bold">${Number(m.meta?.amount).toFixed(2)}</span></div>
                       <div className="flex gap-2 pt-2">
                         <button
                           onClick={() => sendQuickReply(`✅ Your $${Number(m.meta?.amount).toFixed(2)} deposit for ${m.meta?.game} has been approved and credited. Enjoy!`)}
-                          className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-[10px] font-bold hover:bg-emerald-500/25 transition-all"
+                          className="flex-1 flex items-center justify-center gap-1 py-2.5 md:py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-[11px] md:text-[10px] font-bold hover:bg-emerald-500/25 transition-all"
                         >
                           <CheckCircle2 size={12} /> Approve
                         </button>
                         <button
                           onClick={() => sendQuickReply(`❌ Your deposit request for ${m.meta?.game} could not be verified. Please reach out here with more details.`)}
-                          className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg bg-red-500/15 border border-red-500/40 text-red-400 text-[10px] font-bold hover:bg-red-500/25 transition-all"
+                          className="flex-1 flex items-center justify-center gap-1 py-2.5 md:py-1.5 rounded-lg bg-red-500/15 border border-red-500/40 text-red-400 text-[11px] md:text-[10px] font-bold hover:bg-red-500/25 transition-all"
                         >
                           <XCircle size={12} /> Reject
                         </button>
@@ -398,11 +409,11 @@ export default function AdminDashboard() {
                     <img
                       src={`${API_BASE}${m.imageUrl}`}
                       alt="attachment"
-                      className="max-w-[70%] rounded-xl border border-gray-800"
+                      className="max-w-[80%] md:max-w-[70%] rounded-xl border border-gray-800"
                     />
                   ) : (
                     <div
-                      className={`max-w-[70%] px-3 py-2 rounded-xl text-xs ${
+                      className={`max-w-[85%] md:max-w-[70%] px-3 py-2 rounded-xl text-sm md:text-xs break-words ${
                         m.sender === 'admin' ? 'bg-amber-500 text-black' : 'bg-[#131824] text-gray-200'
                       }`}
                     >
@@ -424,6 +435,7 @@ export default function AdminDashboard() {
               />
               <label
                 htmlFor="admin-file-upload"
+                aria-label="Attach image"
                 className="w-9 h-9 shrink-0 rounded-lg bg-[#131824] border border-gray-800 flex items-center justify-center text-gray-400 hover:text-amber-400 hover:border-amber-500/50 cursor-pointer transition-all"
               >
                 {uploading ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />}
@@ -432,9 +444,9 @@ export default function AdminDashboard() {
                 value={messageInput}
                 onChange={(e) => setMessageInput(e.target.value)}
                 placeholder="Reply to player..."
-                className="flex-1 bg-[#131824] border border-gray-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500/60"
+                className="flex-1 min-w-0 bg-[#131824] border border-gray-800 rounded-lg px-3 py-2 text-base md:text-xs text-white focus:outline-none focus:border-amber-500/60"
               />
-              <button type="submit" className="w-9 h-9 shrink-0 rounded-lg bg-amber-500 text-black flex items-center justify-center hover:brightness-110 transition-all">
+              <button type="submit" aria-label="Send" className="w-9 h-9 shrink-0 rounded-lg bg-amber-500 text-black flex items-center justify-center hover:brightness-110 transition-all">
                 <Send size={14} />
               </button>
             </form>

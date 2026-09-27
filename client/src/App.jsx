@@ -4,9 +4,18 @@ import {
   Home, Gamepad2, Dices, Flame, Trophy, Wallet, ArrowUpRight,
   MessageSquare, User, Search, LogIn, UserPlus, Sparkles, Gift, Crown,
   Play, Volume2, ShieldCheck, Zap, X, Landmark, Send, Smartphone,
-  CreditCard, DollarSign, Bitcoin, Clock, Paperclip, Loader2, LogOut
+  CreditCard, DollarSign, Bitcoin, Clock, Paperclip, Loader2, LogOut, Menu
 } from 'lucide-react';
 import { socket, API_BASE, safeJson } from './socket';
+
+const NAV_ITEMS = [
+  { name: 'Lobby Home', icon: Home, tab: 'all' },
+  { name: 'All Slots 777', icon: Sparkles, tab: 'slots' },
+  { name: 'Fish Games', icon: Flame, tab: 'fish' },
+  { name: 'Live Casino', icon: Gamepad2, tab: null },
+  { name: 'Arcade Arena', icon: Dices, tab: 'arcade' },
+  { name: 'VIP Tables', icon: Trophy, tab: 'table' },
+];
 
 function getOrCreateUserId() {
   let uid = localStorage.getItem('h5c_uid');
@@ -51,6 +60,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('all');
   const [jackpot, setJackpot] = useState(12849206.80);
   const [searchQuery, setSearchQuery] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Player account (register/login) — required before depositing
   const [player, setPlayer] = useState(() => {
@@ -231,12 +241,14 @@ export default function App() {
     <div className="min-h-screen bg-[#07090E] text-white flex flex-col font-sans selection:bg-amber-500 selection:text-black">
       
       {/* Top Live Winner Stream Ticker */}
-      <div className="bg-gradient-to-r from-amber-950/80 via-[#0E131F] to-amber-950/80 border-b border-amber-500/20 text-[11px] py-1.5 px-6 flex justify-between items-center text-gray-300">
-        <div className="flex items-center gap-2">
+      <div className="bg-gradient-to-r from-amber-950/80 via-[#0E131F] to-amber-950/80 border-b border-amber-500/20 text-[11px] py-1.5 px-3 sm:px-6 flex justify-between items-center gap-3 text-gray-300">
+        <div className="flex items-center gap-2 shrink-0">
           <Volume2 size={13} className="text-amber-400 animate-pulse" />
-          <span className="text-amber-400 font-extrabold uppercase tracking-wider text-[10px]">LIVE PAYOUTS:</span>
+          <span className="text-amber-400 font-extrabold uppercase tracking-wider text-[10px]">
+            LIVE<span className="hidden sm:inline"> PAYOUTS:</span>
+          </span>
         </div>
-        <div className="flex gap-8 font-medium overflow-hidden whitespace-nowrap text-xs">
+        <div className="flex gap-8 font-medium overflow-hidden whitespace-nowrap text-xs min-w-0">
           <span>🎉 Player <strong className="text-amber-300">Alex_NY</strong> won <strong className="text-emerald-400">$12,450</strong> on Fire Kirin</span>
           <span className="hidden sm:inline">💎 Player <strong className="text-amber-300">VegasKing</strong> won <strong className="text-emerald-400">$8,200</strong> on Ultra Panda</span>
           <span className="hidden md:inline">🔥 Player <strong className="text-amber-300">Sarah_777</strong> won <strong className="text-emerald-400">$45,000</strong> Mega Jackpot</span>
@@ -244,17 +256,24 @@ export default function App() {
       </div>
 
       {/* Main Top Header */}
-      <header className="bg-[#0D111A]/90 backdrop-blur-md border-b border-gray-800/80 px-6 py-3 flex items-center justify-between sticky top-0 z-50 shadow-xl">
+      <header className="bg-[#0D111A]/90 backdrop-blur-md border-b border-gray-800/80 px-3 sm:px-6 py-3 flex items-center justify-between gap-2 sticky top-0 z-50 shadow-xl">
         {/* Brand Logo */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-600 via-yellow-400 to-amber-500 text-black font-black flex items-center justify-center text-xl shadow-lg shadow-amber-500/25 border border-yellow-300">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <button
+            onClick={() => setMenuOpen(true)}
+            aria-label="Open menu"
+            className="lg:hidden p-2 -ml-1 text-gray-300 hover:text-white shrink-0"
+          >
+            <Menu size={22} />
+          </button>
+          <div className="w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-xl bg-gradient-to-tr from-amber-600 via-yellow-400 to-amber-500 text-black font-black flex items-center justify-center text-lg sm:text-xl shadow-lg shadow-amber-500/25 border border-yellow-300">
             5
           </div>
-          <div>
-            <span className="font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-500 tracking-wider text-lg block leading-none">
+          <div className="min-w-0">
+            <span className="font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-500 tracking-wider text-sm sm:text-lg block leading-none whitespace-nowrap">
               HIGH 5 CASINO
             </span>
-            <span className="text-[9px] tracking-[0.25em] text-amber-400/80 uppercase font-semibold">
+            <span className="hidden sm:block text-[9px] tracking-[0.25em] text-amber-400/80 uppercase font-semibold">
               Vegas VIP Gaming
             </span>
           </div>
@@ -275,38 +294,95 @@ export default function App() {
         </div>
 
         {/* Single Right Auth Bar (Clean & Non-repetitive) */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {player ? (
             <>
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#131824] border border-gray-700/80">
-                <User size={14} className="text-amber-400" />
-                <span className="text-xs font-bold text-white">{player.name}</span>
+              <div className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#131824] border border-gray-700/80">
+                <User size={14} className="text-amber-400 shrink-0" />
+                <span className="hidden sm:block text-xs font-bold text-white max-w-[8rem] truncate">{player.name}</span>
               </div>
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-[#131824] border border-gray-700/80 hover:border-red-500/50 hover:text-red-400 transition-all"
+                aria-label="Logout"
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-bold bg-[#131824] border border-gray-700/80 hover:border-red-500/50 hover:text-red-400 transition-all"
               >
-                <LogOut size={14} /> Logout
+                <LogOut size={14} /> <span className="hidden sm:inline">Logout</span>
               </button>
             </>
           ) : (
             <>
               <button
                 onClick={() => navigate('/login')}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#131824] border border-gray-700/80 hover:border-amber-500/50 hover:bg-[#1A2131] transition-all"
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold bg-[#131824] border border-gray-700/80 hover:border-amber-500/50 hover:bg-[#1A2131] transition-all"
               >
                 <LogIn size={14} className="text-amber-400" /> Login
               </button>
               <button
                 onClick={() => navigate('/register')}
-                className="flex items-center gap-1.5 px-5 py-2 rounded-xl text-xs font-black text-black bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:brightness-110 shadow-lg shadow-amber-500/25 transition-all transform hover:-translate-y-0.5"
+                className="flex items-center gap-1.5 px-3 sm:px-5 py-2 rounded-xl text-xs font-black text-black bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:brightness-110 shadow-lg shadow-amber-500/25 transition-all transform hover:-translate-y-0.5 whitespace-nowrap"
               >
-                <UserPlus size={14} /> VIP Register
+                <UserPlus size={14} className="hidden min-[400px]:block" /> <span className="hidden sm:inline">VIP </span>Register
               </button>
             </>
           )}
         </div>
       </header>
+
+      {/* Mobile menu drawer (below lg, where the sidebar is hidden) */}
+      {menuOpen && (
+        <div className="lg:hidden fixed inset-0 z-[90] flex" onClick={() => setMenuOpen(false)}>
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+          <nav
+            className="relative w-72 max-w-[85vw] h-full bg-[#0D111A] border-r border-gray-800/80 p-4 overflow-y-auto flex flex-col gap-1"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-500/80">Main Menu</span>
+              <button onClick={() => setMenuOpen(false)} aria-label="Close menu" className="p-2 -mr-2 text-gray-400 hover:text-white">
+                <X size={20} />
+              </button>
+            </div>
+            {NAV_ITEMS.map((item) => {
+              const Icon = item.icon;
+              const active = item.tab && item.tab === activeTab;
+              return (
+                <button
+                  key={item.name}
+                  onClick={() => {
+                    if (item.tab) setActiveTab(item.tab);
+                    setMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm transition-all ${
+                    active
+                      ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30 font-extrabold'
+                      : 'text-gray-300 hover:bg-[#131824] hover:text-white font-medium'
+                  }`}
+                >
+                  <Icon size={18} /> {item.name}
+                </button>
+              );
+            })}
+            <div className="pt-4 mt-3 border-t border-gray-800/80 flex flex-col gap-1">
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-gray-500 px-3 mb-1">Account Action</span>
+              <button className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold text-gray-300 hover:bg-[#131824] hover:text-amber-400 transition-all">
+                <Wallet size={18} /> Fast Deposit
+              </button>
+              <button className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold text-gray-300 hover:bg-[#131824] hover:text-amber-400 transition-all">
+                <ArrowUpRight size={18} /> Instant Cashout
+              </button>
+              <button
+                onClick={() => {
+                  setChatOpen(true);
+                  setMenuOpen(false);
+                }}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold text-gray-300 hover:bg-[#131824] hover:text-amber-400 transition-all"
+              >
+                <MessageSquare size={18} /> 24/7 Live Support
+              </button>
+            </div>
+          </nav>
+        </div>
+      )}
 
       {/* Web App 3-Column Layout */}
       <div className="flex flex-1 overflow-hidden">
@@ -319,21 +395,15 @@ export default function App() {
             </div>
             
             <nav className="space-y-1">
-              {[
-                { name: 'Lobby Home', icon: Home, active: true },
-                { name: 'All Slots 777', icon: Sparkles },
-                { name: 'Fish Games', icon: Flame },
-                { name: 'Live Casino', icon: Gamepad2 },
-                { name: 'Arcade Arena', icon: Dices },
-                { name: 'VIP Tables', icon: Trophy },
-              ].map((item) => {
+              {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
                 return (
                   <button
                     key={item.name}
+                    onClick={() => item.tab && setActiveTab(item.tab)}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition-all ${
-                      item.active 
-                        ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30 font-extrabold shadow-sm' 
+                      item.tab && item.tab === activeTab
+                        ?'bg-amber-500/10 text-amber-400 border border-amber-500/30 font-extrabold shadow-sm' 
                         : 'text-gray-400 hover:bg-[#131824] hover:text-white font-medium'
                     }`}
                   >
@@ -372,15 +442,27 @@ export default function App() {
         </aside>
 
         {/* Center Main Games & Showcase */}
-        <main className="flex-1 p-4 md:p-6 overflow-y-auto">
-          
+        <main className="flex-1 min-w-0 p-3 sm:p-4 md:p-6 overflow-y-auto">
+
+          {/* Search (the header search bar is hidden below md) */}
+          <div className="md:hidden relative mb-4">
+            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search games..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-[#131824] border border-gray-800 rounded-xl pl-10 pr-4 py-2.5 text-base text-white focus:outline-none focus:border-amber-500/80"
+            />
+          </div>
+
           {/* Animated Hero Jackpot Showcase Banner */}
-          <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-amber-950/60 via-[#131824] to-[#0A0D14] border border-amber-500/30 p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl mb-8">
-            <div className="max-w-xl z-10">
+          <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-amber-950/60 via-[#131824] to-[#0A0D14] border border-amber-500/30 p-4 sm:p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-5 md:gap-6 shadow-2xl mb-6 md:mb-8">
+            <div className="max-w-xl z-10 w-full md:w-auto">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold mb-3 uppercase tracking-wider">
                 <Zap size={13} className="text-yellow-400 fill-yellow-400" /> $1,000 Free Welcome Bonus
               </span>
-              <h1 className="text-3xl md:text-5xl font-black tracking-tight leading-tight mb-2">
+              <h1 className="text-2xl min-[400px]:text-3xl md:text-5xl font-black tracking-tight leading-tight mb-2">
                 LAS VEGAS <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-yellow-200 to-amber-500">JACKPOT ARENA</span>
               </h1>
               <p className="text-xs text-gray-300 mb-5">
@@ -392,19 +474,19 @@ export default function App() {
             </div>
 
             {/* Live Progressive Animated Counter Box */}
-            <div className="bg-black/80 backdrop-blur-md border border-amber-500/50 rounded-2xl p-5 text-center min-w-[270px] shadow-2xl z-10">
+            <div className="bg-black/80 backdrop-blur-md border border-amber-500/50 rounded-2xl p-4 md:p-5 text-center w-full md:w-auto md:min-w-[270px] shadow-2xl z-10">
               <p className="text-[11px] text-amber-400 font-black uppercase tracking-widest mb-1.5 flex items-center justify-center gap-1.5">
                 <Trophy size={14} /> Progressive Vegas Jackpot
               </p>
-              <p className="text-2xl md:text-3xl font-black font-mono text-yellow-300 tracking-wider">
+              <p className="text-xl min-[400px]:text-2xl md:text-3xl font-black font-mono text-yellow-300 tracking-wide md:tracking-wider">
                 ${jackpot.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
           </div>
 
           {/* Interactive Category Filter Bar */}
-          <div className="flex justify-between items-center border-b border-gray-800/80 pb-3 gap-4">
-            <div className="flex gap-2 overflow-x-auto">
+          <div className="flex justify-between items-center border-b border-gray-800/80 pb-3 gap-4 min-w-0">
+            <div className="flex gap-2 overflow-x-auto min-w-0 pb-1">
               {[
                 { id: 'all', name: 'All Games', icon: Sparkles },
                 { id: 'fish', name: 'Fish Games', icon: Flame },
@@ -432,7 +514,7 @@ export default function App() {
           </div>
 
           {/* Dense Casino-Style Game Grid */}
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3 mt-6">
+          <div className="grid grid-cols-2 min-[480px]:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3 mt-6">
             {filteredGames.map((game) => (
               <div
                 key={game.id}
@@ -519,7 +601,7 @@ export default function App() {
         >
           {depositStep === 'form' ? (
             <div
-              className="bg-[#0D111A] border border-amber-500/30 rounded-2xl w-full max-w-md p-5 shadow-2xl relative"
+              className="bg-[#0D111A] border border-amber-500/30 rounded-2xl w-full max-w-md max-h-[92dvh] overflow-y-auto p-4 sm:p-5 shadow-2xl relative"
               onClick={(e) => e.stopPropagation()}
             >
               <button onClick={closeDeposit} className="absolute top-3 right-3 text-gray-400 hover:text-white">
@@ -571,7 +653,7 @@ export default function App() {
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
                       placeholder="0.00"
-                      className="w-full bg-[#131824] border border-gray-800 rounded-xl pl-7 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/80"
+                      className="w-full bg-[#131824] border border-gray-800 rounded-xl pl-7 pr-4 py-2.5 text-base sm:text-sm text-white focus:outline-none focus:border-amber-500/80"
                     />
                   </div>
                 </div>
@@ -587,7 +669,7 @@ export default function App() {
             </div>
           ) : (
             <div
-              className="bg-[#0D111A] border border-amber-500/30 rounded-2xl w-full max-w-md p-6 shadow-2xl text-center relative"
+              className="bg-[#0D111A] border border-amber-500/30 rounded-2xl w-full max-w-md max-h-[92dvh] overflow-y-auto p-5 sm:p-6 shadow-2xl text-center relative"
               onClick={(e) => e.stopPropagation()}
             >
               <button onClick={closeDeposit} className="absolute top-3 right-3 text-gray-400 hover:text-white">
@@ -646,7 +728,7 @@ export default function App() {
       </button>
 
       {chatOpen && (
-        <div className="fixed bottom-24 right-5 z-40 w-80 max-w-[90vw] h-[420px] bg-[#0D111A] border border-gray-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div className="fixed bottom-24 left-3 right-3 sm:left-auto sm:right-5 z-40 sm:w-80 h-[min(70dvh,480px)] sm:h-[420px] bg-[#0D111A] border border-gray-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
           <div className="bg-[#131824] border-b border-gray-800 px-4 py-3 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
@@ -712,9 +794,9 @@ export default function App() {
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               placeholder="Type a message..."
-              className="flex-1 bg-[#131824] border border-gray-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500/60"
+              className="flex-1 min-w-0 bg-[#131824] border border-gray-800 rounded-lg px-3 py-2 text-base sm:text-xs text-white focus:outline-none focus:border-amber-500/60"
             />
-            <button type="submit" className="w-9 h-9 shrink-0 rounded-lg bg-amber-500 text-black flex items-center justify-center">
+            <button type="submit" aria-label="Send" className="w-9 h-9 shrink-0 rounded-lg bg-amber-500 text-black flex items-center justify-center">
               <Send size={14} />
             </button>
           </form>
