@@ -8,10 +8,15 @@ const cleanKey = (v) => (typeof v === 'string' ? v.replace(/[\s"']/g, '') : '');
 const cleanText = (v) => (typeof v === 'string' ? v.trim().replace(/^["']|["']$/g, '').trim() : '');
 
 function readConfig() {
+  let subject = cleanText(process.env.VAPID_SUBJECT) || 'mailto:admin@example.com';
+  // A bare email address is the most common way to fill this in; the spec wants "mailto:" in front.
+  const subjectFixed = /^[^@\s:]+@[^@\s]+\.[^@\s]+$/.test(subject);
+  if (subjectFixed) subject = `mailto:${subject}`;
   return {
     publicKey: cleanKey(process.env.VAPID_PUBLIC_KEY),
     privateKey: cleanKey(process.env.VAPID_PRIVATE_KEY),
-    subject: cleanText(process.env.VAPID_SUBJECT) || 'mailto:admin@example.com',
+    subject,
+    subjectFixed,
   };
 }
 
@@ -22,9 +27,12 @@ function getPublicKey() {
 
 // Everything that could stop a push from being sent, in one place, for logs and the admin panel.
 function getVapidStatus() {
-  const { publicKey, privateKey, subject } = readConfig();
+  const { publicKey, privateKey, subject, subjectFixed } = readConfig();
   const problems = [];
   const status = { configured: false, keysMatch: false, publicKeyLength: publicKey.length, subject, problems };
+  if (subjectFixed) {
+    problems.push('VAPID_SUBJECT was missing "mailto:" — added automatically; please correct it in your environment settings');
+  }
 
   if (!publicKey || !privateKey) {
     problems.push('VAPID_PUBLIC_KEY and/or VAPID_PRIVATE_KEY are not set');
