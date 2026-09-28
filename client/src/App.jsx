@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Home, Gamepad2, Dices, Flame, Trophy, Wallet, ArrowUpRight,
-  MessageSquare, User, Search, LogIn, UserPlus, Sparkles, Crown,
+  MessageSquare, Search, LogIn, UserPlus, Sparkles, Crown,
   Play, Volume2, Zap, X, Landmark, Send, Smartphone,
-  CreditCard, DollarSign, Bitcoin, Clock, LogOut, Menu, LayoutDashboard
+  CreditCard, DollarSign, Bitcoin, Clock, LogOut, Menu, LayoutDashboard, ChevronDown, ListChecks
 } from 'lucide-react';
 import { usePlayer } from './PlayerContext';
+import { API_BASE, safeJson } from './socket';
 import ChatWidget from './ChatWidget';
 
 const NAV_ITEMS = [
@@ -40,13 +41,61 @@ const PAYMENT_METHODS = [
 
 export default function App() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState('all');
   const [jackpot, setJackpot] = useState(12849206.80);
   const [searchQuery, setSearchQuery] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef(null);
+  const gamesRef = useRef(null);
 
   // Account + persistent chat thread live in PlayerContext (shared with the dashboard)
-  const { user: player, logout, setChatOpen, sendDeposit } = usePlayer();
+  const { user: player, token, logout, setChatOpen, sendDeposit, depositsVersion } = usePlayer();
+
+  // This player's deposits — drives the first-deposit guide and the "pending" indicators.
+  const [myDeposits, setMyDeposits] = useState(null);
+  // Dismissing the guide is remembered per account, so a second new player on this device still sees it.
+  const guideKey = player ? `h5c_guide_dismissed:${player.email}` : null;
+  const [, setGuideTick] = useState(0);
+  const guideDismissed = !!guideKey && localStorage.getItem(guideKey) === '1';
+  useEffect(() => {
+    if (!token) {
+      setMyDeposits(null);
+      return undefined;
+    }
+    let cancelled = false;
+    fetch(`${API_BASE}/api/me/deposits`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(safeJson)
+      .then((data) => {
+        if (!cancelled && Array.isArray(data.deposits)) setMyDeposits(data.deposits);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [token, depositsVersion]);
+  const pendingCount = myDeposits ? myDeposits.filter((d) => d.status === 'pending').length : 0;
+  const showGuide = !!player && myDeposits !== null && myDeposits.length === 0 && !guideDismissed;
+
+  // Close the profile menu on outside click / Escape.
+  useEffect(() => {
+    if (!userMenuOpen) return undefined;
+    const onClick = (e) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) setUserMenuOpen(false);
+    };
+    const onKey = (e) => e.key === 'Escape' && setUserMenuOpen(false);
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('touchstart', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('touchstart', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [userMenuOpen]);
+
+  const scrollToGames = () => gamesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   // Mock Deposit Flow — the summary card is sent into the player's chat thread,
   // no real payment is ever processed
@@ -65,7 +114,8 @@ export default function App() {
 
   const openDeposit = (game) => {
     if (!player) {
-      navigate('/login');
+      // Remember the game so its deposit window opens right after they log in.
+      navigate('/login', { state: { from: '/', openGame: game.name } });
       return;
     }
     setDepositGame(game);
@@ -120,6 +170,16 @@ export default function App() {
     { id: 22, name: 'E Game', category: 'arcade', thumbnail: '/assets/games/e-game.svg', badge: 'HOT', rtp: '98.1%' },
     { id: 23, name: 'Blue Dragon', category: 'fish', thumbnail: '/assets/games/blue-dragon.svg', badge: 'JACKPOT', rtp: '99.0%' },
   ];
+
+  // Arrived from login/register after tapping a game: open that game's deposit window, once.
+  useEffect(() => {
+    const wanted = location.state?.openGame;
+    if (!wanted || !player) return;
+    navigate(location.pathname, { replace: true, state: null });
+    const game = games.find((g) => g.name === wanted);
+    if (game) openDeposit(game);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state, player]);
 
   const filteredGames = games.filter(
     (g) => (activeTab === 'all' || g.category === activeTab) &&
@@ -186,21 +246,87 @@ export default function App() {
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {player ? (
             <>
-              <Link
-                to="/dashboard"
-                aria-label="My dashboard"
-                className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#131824] border border-gray-700/80 hover:border-amber-500/50 transition-all"
-              >
-                <User size={14} className="text-amber-400 shrink-0" />
-                <span className="hidden sm:block text-xs font-bold text-white max-w-[8rem] truncate">{player.name}</span>
-              </Link>
               <button
-                onClick={logout}
-                aria-label="Logout"
-                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl text-xs font-bold bg-[#131824] border border-gray-700/80 hover:border-red-500/50 hover:text-red-400 transition-all"
+                onClick={scrollToGames}
+                className="hidden sm:flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black text-black bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:brightness-110 shadow-lg shadow-amber-500/25 transition-all whitespace-nowrap"
               >
-                <LogOut size={14} /> <span className="hidden sm:inline">Logout</span>
+                <Wallet size={14} /> Deposit
               </button>
+
+              <div className="relative" ref={userMenuRef}>
+                <button
+                  onClick={() => setUserMenuOpen((o) => !o)}
+                  data-testid="user-menu"
+                  aria-haspopup="menu"
+                  aria-expanded={userMenuOpen}
+                  aria-label="Account menu"
+                  className="flex items-center gap-2 pl-1.5 pr-2 sm:pr-2.5 py-1.5 rounded-xl bg-[#131824] border border-gray-700/80 hover:border-amber-500/50 transition-all"
+                >
+                  <span className="relative w-7 h-7 rounded-full bg-gradient-to-tr from-amber-600 via-yellow-400 to-amber-500 text-black text-xs font-black flex items-center justify-center">
+                    {player.name?.[0]?.toUpperCase()}
+                    {pendingCount > 0 && (
+                      <span
+                        data-testid="pending-badge"
+                        className="absolute -top-1.5 -right-1.5 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center ring-2 ring-[#0D111A]"
+                      >
+                        {pendingCount}
+                      </span>
+                    )}
+                  </span>
+                  <span className="hidden sm:block text-xs font-bold text-white max-w-[7rem] truncate">{player.name}</span>
+                  <ChevronDown size={14} className={`text-gray-400 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {userMenuOpen && (
+                  <div role="menu" className="absolute right-0 mt-2 w-64 bg-[#0D111A] border border-gray-800 rounded-xl shadow-2xl overflow-hidden z-[70]">
+                    <div className="px-4 py-3 border-b border-gray-800 bg-gradient-to-r from-amber-950/40 to-transparent">
+                      <p className="text-sm font-bold text-white truncate">{player.name}</p>
+                      <p className="text-[11px] text-gray-500 truncate">{player.email}</p>
+                    </div>
+                    <div className="py-1">
+                      <button
+                        role="menuitem"
+                        data-testid="menu-account"
+                        onClick={() => { setUserMenuOpen(false); navigate('/dashboard'); }}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-200 hover:bg-[#131824] transition-colors"
+                      >
+                        <LayoutDashboard size={16} className="text-amber-400" /> My Account
+                      </button>
+                      <button
+                        role="menuitem"
+                        data-testid="menu-deposits"
+                        onClick={() => { setUserMenuOpen(false); navigate('/dashboard'); }}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-200 hover:bg-[#131824] transition-colors"
+                      >
+                        <ListChecks size={16} className="text-amber-400" /> My Deposits
+                        {pendingCount > 0 && (
+                          <span className="ml-auto px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[10px] font-black">
+                            {pendingCount} pending
+                          </span>
+                        )}
+                      </button>
+                      <button
+                        role="menuitem"
+                        data-testid="menu-chat"
+                        onClick={() => { setUserMenuOpen(false); setChatOpen(true); }}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-200 hover:bg-[#131824] transition-colors"
+                      >
+                        <MessageSquare size={16} className="text-amber-400" /> Support Chat
+                      </button>
+                    </div>
+                    <div className="border-t border-gray-800 py-1">
+                      <button
+                        role="menuitem"
+                        data-testid="menu-logout"
+                        onClick={() => { setUserMenuOpen(false); logout(); }}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                      >
+                        <LogOut size={16} /> Log out
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </>
           ) : (
             <>
@@ -364,8 +490,14 @@ export default function App() {
           {/* Animated Hero Jackpot Showcase Banner */}
           <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-amber-950/60 via-[#131824] to-[#0A0D14] border border-amber-500/30 p-4 sm:p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-5 md:gap-6 shadow-2xl mb-6 md:mb-8">
             <div className="max-w-xl z-10 w-full md:w-auto">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold mb-3 uppercase tracking-wider">
-                <Zap size={13} className="text-yellow-400 fill-yellow-400" /> $1,000 Free Welcome Bonus
+              <span
+                data-testid="hero-badge"
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold mb-3 uppercase tracking-wider max-w-full"
+              >
+                <Zap size={13} className="text-yellow-400 fill-yellow-400 shrink-0" />
+                <span className="truncate">
+                  {player ? `Welcome, ${player.name.split(' ')[0]}` : '$1,000 Free Welcome Bonus'}
+                </span>
               </span>
               <h1 className="text-2xl min-[400px]:text-3xl md:text-5xl font-black tracking-tight leading-tight mb-2">
                 LAS VEGAS <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-yellow-200 to-amber-500">JACKPOT ARENA</span>
@@ -373,8 +505,11 @@ export default function App() {
               <p className="text-xs text-gray-300 mb-5">
                 America's premier online casino platform with 99%+ RTP certified slots & instant crypto/fiat payouts.
               </p>
-              <button className="px-7 py-3 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-black font-black text-sm tracking-wider flex items-center gap-2.5 shadow-xl shadow-amber-500/30 hover:scale-105 transition-all">
-                <Play fill="black" size={16} /> START PLAYING NOW
+              <button
+                onClick={scrollToGames}
+                className="px-7 py-3 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-black font-black text-sm tracking-wider flex items-center gap-2.5 shadow-xl shadow-amber-500/30 hover:scale-105 transition-all"
+              >
+                <Play fill="black" size={16} /> {player ? 'CHOOSE A GAME' : 'START PLAYING NOW'}
               </button>
             </div>
 
@@ -389,8 +524,54 @@ export default function App() {
             </div>
           </div>
 
+          {/* First-deposit guide: shown until the player has made a deposit (or dismisses it) */}
+          {showGuide && (
+            <div data-testid="first-deposit-guide" className="relative mb-6 rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-950/40 via-[#131824] to-[#0A0D14] p-4 sm:p-5">
+              <button
+                onClick={() => { localStorage.setItem(guideKey, '1'); setGuideTick((t) => t + 1); }}
+                aria-label="Dismiss guide"
+                className="absolute top-2.5 right-2.5 p-1.5 text-gray-500 hover:text-white"
+              >
+                <X size={16} />
+              </button>
+              <p className="text-sm font-black text-white mb-3 pr-8">Make your first deposit in 3 steps</p>
+              <ol className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {[
+                  ['1', 'Pick a game', 'Tap any game below to start.'],
+                  ['2', 'Choose amount & method', 'Select how you\'d like to pay and enter the amount.'],
+                  ['3', 'Track it', 'Our team confirms it in your chat. See the status under My Account.'],
+                ].map(([n, title, text]) => (
+                  <li key={n} className="flex gap-3">
+                    <span className="w-7 h-7 shrink-0 rounded-full bg-amber-500 text-black text-xs font-black flex items-center justify-center">{n}</span>
+                    <span className="min-w-0">
+                      <span className="block text-xs font-bold text-white">{title}</span>
+                      <span className="block text-[11px] text-gray-400 leading-snug">{text}</span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {/* Pending deposits reminder */}
+          {player && pendingCount > 0 && (
+            <button
+              onClick={() => navigate('/dashboard')}
+              data-testid="pending-strip"
+              className="w-full mb-6 flex items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-left hover:bg-amber-500/15 transition-colors"
+            >
+              <span className="flex items-center gap-2 text-xs sm:text-sm font-bold text-amber-200 min-w-0">
+                <Clock size={16} className="shrink-0" />
+                <span className="truncate">
+                  {pendingCount} deposit{pendingCount === 1 ? '' : 's'} waiting for confirmation
+                </span>
+              </span>
+              <span className="text-[11px] font-bold text-amber-300 shrink-0">View →</span>
+            </button>
+          )}
+
           {/* Interactive Category Filter Bar */}
-          <div className="flex justify-between items-center border-b border-gray-800/80 pb-3 gap-4 min-w-0">
+          <div ref={gamesRef} className="scroll-mt-24 flex justify-between items-center border-b border-gray-800/80 pb-3 gap-4 min-w-0">
             <div className="flex gap-2 overflow-x-auto min-w-0 pb-1">
               {[
                 { id: 'all', name: 'All Games', icon: Sparkles },
@@ -619,6 +800,13 @@ export default function App() {
                   Continue in Chat →
                 </button>
               </div>
+              <button
+                onClick={() => { closeDeposit(); navigate('/dashboard'); }}
+                data-testid="view-deposits"
+                className="mt-3 w-full py-2.5 text-xs font-bold text-amber-300 hover:text-amber-200 transition-colors"
+              >
+                View my deposits →
+              </button>
             </div>
           )}
         </div>

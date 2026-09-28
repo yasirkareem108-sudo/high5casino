@@ -15,7 +15,9 @@ export default function AuthPage({ mode }) {
 
   const handleChange = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
 
-  if (user) return <Navigate to="/dashboard" replace />;
+  // The games lobby is home: signed-in players never need the login/register pages.
+  const openGame = location.state?.openGame;
+  if (user) return <Navigate to="/" replace state={openGame ? { openGame } : null} />;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -33,7 +35,9 @@ export default function AuthPage({ mode }) {
       if (!res.ok) throw new Error(data.message || 'Something went wrong');
 
       login(data.token, data.user);
-      navigate(location.state?.from || '/dashboard', { replace: true });
+      // Land in the lobby (the games), not the account page — and if they tapped a game before
+      // being asked to log in, carry that game along so its deposit window opens.
+      navigate(location.state?.from || '/', { replace: true, state: openGame ? { openGame } : null });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -99,9 +103,9 @@ export default function AuthPage({ mode }) {
 
         <p className="text-[11px] text-gray-500 text-center mt-4">
           {isRegister ? (
-            <>Already have an account? <Link to="/login" className="text-amber-400 font-semibold hover:underline">Login</Link></>
+            <>Already have an account? <Link to="/login" state={location.state} className="text-amber-400 font-semibold hover:underline">Login</Link></>
           ) : (
-            <>New here? <Link to="/register" className="text-amber-400 font-semibold hover:underline">Create an account</Link></>
+            <>New here? <Link to="/register" state={location.state} className="text-amber-400 font-semibold hover:underline">Create an account</Link></>
           )}
         </p>
         <p className="text-[10px] text-gray-600 text-center mt-2">
