@@ -3,7 +3,8 @@ import {
   LogOut, Send, Paperclip, Inbox, CheckCircle2, XCircle, Loader2, ShieldCheck, Bell, X, ArrowLeft,
 } from 'lucide-react';
 import { socket, API_BASE, safeJson } from './socket';
-import { subscribeAdminToPush } from './push';
+import { ensureSubscription, getPushEnvironment } from './push';
+import NotificationSettings from './NotificationSettings';
 import { setBadge, clearBadge } from './badge';
 
 const TOKEN_KEY = 'h5c_admin_token';
@@ -57,6 +58,8 @@ export default function AdminDashboard() {
   const [toasts, setToasts] = useState([]);
   const [conversationsLoaded, setConversationsLoaded] = useState(false);
   const [authTick, setAuthTick] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [pushEnv, setPushEnv] = useState(getPushEnvironment);
 
   const selectedIdRef = useRef(null);
   const conversationsRef = useRef([]);
@@ -199,8 +202,10 @@ export default function AdminDashboard() {
     if (authed && token) fetchConversations(token);
   }, [authed, token, authTick, fetchConversations]);
 
+  // Quietly keeps an already-allowed device registered (and heals a stale key). Asking for permission
+  // is left to the Notifications panel because phones only honour a prompt that follows a tap.
   useEffect(() => {
-    if (authed && token) subscribeAdminToPush(token);
+    if (authed && token) ensureSubscription(token).finally(() => setPushEnv(getPushEnvironment()));
   }, [authed, token]);
 
   useEffect(() => {
@@ -370,6 +375,16 @@ export default function AdminDashboard() {
         ))}
       </div>
 
+      {showNotifications && (
+        <NotificationSettings
+          token={token}
+          onClose={() => {
+            setShowNotifications(false);
+            setPushEnv(getPushEnvironment());
+          }}
+        />
+      )}
+
       {/* Conversation List */}
       <aside
         className={`${selectedId ? 'hidden md:flex' : 'flex'} w-full md:w-72 bg-[#0D111A] md:border-r border-gray-800/80 flex-col shrink-0 min-w-0`}
@@ -387,9 +402,22 @@ export default function AdminDashboard() {
               </span>
             )}
           </div>
-          <button onClick={handleLogout} aria-label="Log out" className="p-2 -mr-2 text-gray-400 hover:text-white">
-            <LogOut size={16} />
-          </button>
+          <div className="flex items-center">
+            <button
+              onClick={() => setShowNotifications(true)}
+              aria-label="Notification settings"
+              data-testid="bell"
+              className="relative p-2 text-gray-400 hover:text-white"
+            >
+              <Bell size={16} />
+              {pushEnv.permission !== 'granted' && (
+                <span data-testid="bell-attention" className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-400" />
+              )}
+            </button>
+            <button onClick={handleLogout} aria-label="Log out" className="p-2 -mr-2 text-gray-400 hover:text-white">
+              <LogOut size={16} />
+            </button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto">
           {conversations.length === 0 && (
