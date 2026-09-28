@@ -56,7 +56,9 @@ function registerChatHandlers(io) {
     return runExclusive(String(conversationId), async () => {
       const message = await Message.create({ conversationId, ...fields });
       const lastMessageAt = new Date();
-      const update = { $set: { lastMessageText: preview, lastMessageAt } };
+      const lastMessageType = fields.type || 'text';
+      const lastMessageSender = fields.sender;
+      const update = { $set: { lastMessageText: preview, lastMessageAt, lastMessageType, lastMessageSender } };
       if (fields.sender === 'user') update.$inc = { adminUnread: 1 };
       const conversation = await Conversation.findByIdAndUpdate(conversationId, update, { returnDocument: 'after' });
 
@@ -65,6 +67,8 @@ function registerChatHandlers(io) {
         conversationId,
         lastMessageText: preview,
         lastMessageAt,
+        lastMessageType,
+        lastMessageSender,
         adminUnread: conversation?.adminUnread ?? 0,
       });
       return message;

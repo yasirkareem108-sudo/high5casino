@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  LogOut, Send, Paperclip, Inbox, CheckCircle2, XCircle, Loader2, ShieldCheck, Bell, X, ArrowLeft,
+  LogOut, Send, Paperclip, Inbox, CheckCircle2, XCircle, Loader2, ShieldCheck, Bell, X, ArrowLeft, Search, Image as ImageIcon,
 } from 'lucide-react';
 import { socket, API_BASE, safeJson } from './socket';
 import { ensureSubscription, getPushEnvironment } from './push';
@@ -41,6 +41,39 @@ function avatarColor(key) {
 function avatarInitials(name) {
   const words = String(name || '').split(/\s+/).map((w) => w.replace(/[^\p{L}\p{N}]/gu, '')).filter(Boolean);
   return (words.slice(0, 2).map((w) => w[0]).join('') || '?').toUpperCase();
+}
+
+const CHIP_TONE = {
+  amber: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
+  green: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40',
+  red: 'bg-red-500/15 text-red-300 border-red-500/40',
+  sky: 'bg-sky-500/15 text-sky-300 border-sky-500/40',
+};
+
+// Turns a conversation's last message into what the list shows: a coloured label, the text,
+// and whether it was our own reply. Older conversations predate lastMessageType/Sender, so fall
+// back to reading the emoji the server puts in the preview text.
+function describeLast(c) {
+  const raw = c.lastMessageText || '';
+  if (!raw) return { kind: 'empty', text: 'No messages yet', byAdmin: false };
+
+  const type = c.lastMessageType && c.lastMessageType !== 'text'
+    ? c.lastMessageType
+    : raw.startsWith('💳') ? 'deposit_card' : raw.startsWith('📷') ? 'image' : 'text';
+  const byAdmin = c.lastMessageSender ? c.lastMessageSender === 'admin' : /^(✅|❌)/.test(raw);
+
+  if (type === 'deposit_card') {
+    const amount = raw.match(/\$[\d,]+(?:\.\d+)?/)?.[0];
+    return { kind: 'deposit', chip: 'DEPOSIT', tone: 'amber', text: amount ? `${amount} requested` : 'Deposit requested', byAdmin: false };
+  }
+  if (type === 'image') return { kind: 'image', text: 'Photo', byAdmin };
+  if (byAdmin && raw.startsWith('✅')) {
+    return { kind: 'approved', chip: 'APPROVED', tone: 'green', text: raw.replace(/^✅\s*/, ''), byAdmin: true };
+  }
+  if (byAdmin && raw.startsWith('❌')) {
+    return { kind: 'rejected', chip: 'REJECTED', tone: 'red', text: raw.replace(/^❌\s*/, ''), byAdmin: true };
+  }
+  return { kind: 'text', text: raw, byAdmin };
 }
 
 // Two-tone notification chime via Web Audio — no external sound file needed
@@ -84,6 +117,8 @@ export default function AdminDashboard() {
   const [authTick, setAuthTick] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [pushEnv, setPushEnv] = useState(getPushEnvironment);
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState('all'); // 'all' | 'unread' | 'deposits'
 
   const selectedIdRef = useRef(null);
   const conversationsRef = useRef([]);
@@ -101,6 +136,18 @@ export default function AdminDashboard() {
   // Unread alerts live on the server (per conversation), so they survive reloads and are the
   // same on every admin device. The app-icon badge is simply their sum.
   const totalUnread = conversations.reduce((sum, c) => sum + (c.adminUnread || 0), 0);
+
+  const filterCounts = {
+    all: conversations.length,
+    unread: conversations.filter((c) => c.adminUnread > 0).length,
+    deposits: conversations.filter((c) => describeLast(c).kind === 'deposit').length,
+  };
+  const needle = query.trim().toLowerCase();
+  const visibleConversations = conversations.filter((c) => {
+    if (filter === 'unread' && !(c.adminUnread > 0)) return false;
+    if (filter === 'deposits' && describeLast(c).kind !== 'deposit') return false;
+    return !needle || `${c.userName} ${c.email || ''}`.toLowerCase().includes(needle);
+  });
 
   // Wait for the first load so a badge set by a push while the app was closed isn't wiped
   // to 0 before the real count arrives.
@@ -168,6 +215,8 @@ export default function AdminDashboard() {
                 userName: update.userName ?? c.userName,
                 email: update.email ?? c.email,
                 lastMessageText: update.lastMessageText ?? c.lastMessageText,
+                lastMessageType: update.lastMessageType ?? c.lastMessageType,
+                lastMessageSender: update.lastMessageSender ?? c.lastMessageSender,
                 lastMessageAt: update.lastMessageAt ?? c.lastMessageAt,
                 adminUnread: beingRead ? 0 : update.adminUnread ?? c.adminUnread ?? 0,
               }
@@ -443,6 +492,40 @@ export default function AdminDashboard() {
             </button>
           </div>
         </div>
+        <div className="px-3 pt-3 pb-2 space-y-2 border-b border-gray-800/60">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search name or email"
+              aria-label="Search conversations"
+              className="w-full bg-[#131824] border border-gray-800 rounded-xl pl-9 pr-3 py-2.5 md:py-2 text-base md:text-xs text-white placeholder:text-gray-600 focus:outline-none focus:border-amber-500/60"
+            />
+          </div>
+          <div className="flex gap-1.5 overflow-x-auto">
+            {[
+              ['all', 'All', filterCounts.all],
+              ['unread', 'Unread', filterCounts.unread],
+              ['deposits', 'Deposits', filterCounts.deposits],
+            ].map(([id, label, n]) => (
+              <button
+                key={id}
+                onClick={() => setFilter(id)}
+                data-testid={`filter-${id}`}
+                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${
+                  filter === id
+                    ? 'bg-amber-500 text-black border-amber-500'
+                    : 'bg-[#131824] text-gray-400 border-gray-800 hover:text-white'
+                }`}
+              >
+                {label}{' '}
+                <span className={filter === id ? 'text-black/70' : id === 'unread' && n > 0 ? 'text-red-400' : 'text-gray-500'}>{n}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="flex-1 overflow-y-auto">
           {conversations.length === 0 && (
             <div className="flex flex-col items-center gap-2 text-center mt-16 px-6 text-gray-600">
@@ -450,41 +533,79 @@ export default function AdminDashboard() {
               <p className="text-xs">No conversations yet.</p>
             </div>
           )}
-          {conversations.map((c) => {
+          {conversations.length > 0 && visibleConversations.length === 0 && (
+            <div className="flex flex-col items-center gap-2 text-center mt-12 px-6 text-gray-600">
+              <Search size={24} className="text-gray-700" />
+              <p className="text-xs">Nothing matches.</p>
+            </div>
+          )}
+          {visibleConversations.map((c) => {
+            const last = describeLast(c);
             const selected = selectedId === c._id;
             const unread = c.adminUnread > 0;
+            const needsAction = last.kind === 'deposit';
             return (
               <button
                 key={c._id}
                 onClick={() => selectConversation(c._id)}
-                className={`relative w-full text-left flex items-center gap-3 pl-3 pr-4 py-3 border-l-[3px] transition-colors
-                  after:absolute after:bottom-0 after:left-[4.25rem] after:right-0 after:h-px after:bg-gray-800/70 ${
+                className={`relative w-full text-left flex items-center gap-3 pl-3 pr-4 py-3.5 md:py-3 border-l-[3px] transition-colors
+                  after:absolute after:bottom-0 after:left-[4.75rem] md:after:left-[4.25rem] after:right-0 after:h-px after:bg-gray-800/70 ${
                   selected
                     ? 'bg-amber-500/10 border-l-amber-500'
-                    : unread
-                      ? 'bg-red-500/[0.05] border-l-red-500 hover:bg-[#131824]'
-                      : 'border-l-transparent hover:bg-[#131824] active:bg-[#171d2c]'
+                    : needsAction
+                      ? 'bg-amber-500/[0.07] border-l-amber-400 hover:bg-amber-500/10'
+                      : unread
+                        ? 'bg-red-500/[0.05] border-l-red-500 hover:bg-[#131824]'
+                        : 'border-l-transparent hover:bg-[#131824] active:bg-[#171d2c]'
                 }`}
               >
                 <span
                   aria-hidden="true"
-                  className={`w-11 h-11 shrink-0 rounded-full bg-gradient-to-br ${avatarColor(c._id)} text-white text-sm font-black flex items-center justify-center shadow-md shadow-black/40`}
+                  className={`w-12 h-12 md:w-11 md:h-11 shrink-0 rounded-full bg-gradient-to-br ${avatarColor(c._id)} text-white text-base md:text-sm font-black flex items-center justify-center shadow-md shadow-black/40 ${
+                    unread || needsAction
+                      ? `ring-2 ring-offset-2 ring-offset-[#0D111A] ${needsAction ? 'ring-amber-400/80' : 'ring-red-500/80'}`
+                      : ''
+                  }`}
                 >
                   {avatarInitials(c.userName)}
                 </span>
 
                 <span className="flex-1 min-w-0">
                   <span className="flex items-baseline justify-between gap-2">
-                    <span className={`truncate text-sm ${unread ? 'font-extrabold text-white' : 'font-semibold text-gray-100'}`}>
+                    <span className={`truncate text-base md:text-sm ${unread ? 'font-extrabold text-white' : 'font-bold text-gray-100'}`}>
                       {c.userName}
                     </span>
-                    <span className={`text-[10px] shrink-0 ${unread ? 'text-red-400 font-semibold' : 'text-gray-500'}`}>
+                    <span className={`text-[11px] md:text-[10px] shrink-0 ${unread ? 'text-red-400 font-semibold' : 'text-gray-500'}`}>
                       {timeAgo(c.lastMessageAt)}
                     </span>
                   </span>
-                  <span className="flex items-center justify-between gap-2 mt-0.5">
-                    <span className={`truncate text-xs ${unread ? 'text-gray-200 font-medium' : 'text-gray-500'}`}>
-                      {c.lastMessageText || 'No messages yet'}
+
+                  <span className="flex items-center gap-1.5 mt-0.5 min-w-0">
+                    {c.email ? (
+                      <span className="truncate text-xs md:text-[11px] text-sky-300/80">{c.email}</span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 rounded bg-slate-500/20 text-slate-300 text-[10px] font-bold uppercase tracking-wide">
+                        Guest
+                      </span>
+                    )}
+                  </span>
+
+                  <span className="flex items-center justify-between gap-2 mt-1">
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      {last.chip && (
+                        <span className={`shrink-0 px-1.5 py-0.5 rounded-md border text-[10px] font-black tracking-wide ${CHIP_TONE[last.tone]}`}>
+                          {last.chip}
+                        </span>
+                      )}
+                      {last.kind === 'image' && <ImageIcon size={13} className="shrink-0 text-sky-300" />}
+                      <span
+                        className={`truncate text-sm md:text-xs ${
+                          unread ? 'text-gray-100 font-medium' : last.tone === 'amber' ? 'text-amber-200/80' : 'text-gray-500'
+                        }`}
+                      >
+                        {last.byAdmin && <span className="text-gray-500">You: </span>}
+                        {last.text}
+                      </span>
                     </span>
                     {unread && (
                       <span
