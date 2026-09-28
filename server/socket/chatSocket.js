@@ -85,7 +85,8 @@ function registerChatHandlers(io) {
         if (decoded.role !== 'admin') throw new Error('Not an admin token');
         socket.isAdmin = true;
         socket.join('admins');
-        socket.emit('admin:authed');
+        // serverTime lets the dashboard show "5m ago" correctly even if this device's clock is wrong.
+        socket.emit('admin:authed', { serverTime: Date.now() });
       } catch (err) {
         socket.emit('admin:auth_error', 'Invalid or expired token');
       }

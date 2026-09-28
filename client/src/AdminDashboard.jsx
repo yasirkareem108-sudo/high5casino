@@ -9,8 +9,10 @@ import { setBadge, clearBadge } from './badge';
 
 const TOKEN_KEY = 'h5c_admin_token';
 
-function timeAgo(dateStr) {
-  const diffMs = Date.now() - new Date(dateStr).getTime();
+// `now` should be the SERVER's current time (see clockOffset): timestamps come from the server, and a
+// device whose own clock is off would otherwise show every message as "just now" (or hours late).
+function timeAgo(dateStr, now = Date.now()) {
+  const diffMs = now - new Date(dateStr).getTime();
   const mins = Math.floor(diffMs / 60000);
   if (mins < 1) return 'just now';
   if (mins < 60) return `${mins}m ago`;
@@ -115,6 +117,9 @@ export default function AdminDashboard() {
   const [toasts, setToasts] = useState([]);
   const [conversationsLoaded, setConversationsLoaded] = useState(false);
   const [authTick, setAuthTick] = useState(0);
+  // server time minus this device's time, learned when the socket authenticates
+  const [clockOffset, setClockOffset] = useState(0);
+  const [, setClockTick] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [pushEnv, setPushEnv] = useState(getPushEnvironment);
   const [query, setQuery] = useState('');
@@ -132,6 +137,12 @@ export default function AdminDashboard() {
   useEffect(() => {
     conversationsRef.current = conversations;
   }, [conversations]);
+
+  // Keeps the "5m ago" labels ticking while the page sits open.
+  useEffect(() => {
+    const id = setInterval(() => setClockTick((t) => t + 1), 30000);
+    return () => clearInterval(id);
+  }, []);
 
   // Unread alerts live on the server (per conversation), so they survive reloads and are the
   // same on every admin device. The app-icon badge is simply their sum.
@@ -188,7 +199,8 @@ export default function AdminDashboard() {
 
   // Socket listeners (registered once)
   useEffect(() => {
-    const onAuthed = () => {
+    const onAuthed = (info) => {
+      if (info && typeof info.serverTime === 'number') setClockOffset(info.serverTime - Date.now());
       setAuthed(true);
       setAuthTick((t) => t + 1); // also fires on reconnect, so anything missed while offline is re-fetched
     };
@@ -576,7 +588,7 @@ export default function AdminDashboard() {
                       {c.userName}
                     </span>
                     <span className={`text-[11px] md:text-[10px] shrink-0 ${unread ? 'text-red-400 font-semibold' : 'text-gray-500'}`}>
-                      {timeAgo(c.lastMessageAt)}
+                      {timeAgo(c.lastMessageAt, Date.now() + clockOffset)}
                     </span>
                   </span>
 
