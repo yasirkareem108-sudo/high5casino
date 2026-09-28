@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { socket, API_BASE, safeJson } from './socket';
 import { subscribeAdminToPush } from './push';
+import { setBadge, clearBadge } from './badge';
 
 const TOKEN_KEY = 'h5c_admin_token';
 
@@ -53,16 +54,49 @@ export default function AdminDashboard() {
   const [messages, setMessages] = useState([]);
   const [messageInput, setMessageInput] = useState('');
   const [uploading, setUploading] = useState(false);
-  const [unreadIds, setUnreadIds] = useState(() => new Set());
   const [toasts, setToasts] = useState([]);
+  const [conversationsLoaded, setConversationsLoaded] = useState(false);
+  const [authTick, setAuthTick] = useState(0);
 
   const selectedIdRef = useRef(null);
+  const conversationsRef = useRef([]);
   const scrollRef = useRef(null);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
+
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
+
+  // Unread alerts live on the server (per conversation), so they survive reloads and are the
+  // same on every admin device. The app-icon badge is simply their sum.
+  const totalUnread = conversations.reduce((sum, c) => sum + (c.adminUnread || 0), 0);
+
+  // Wait for the first load so a badge set by a push while the app was closed isn't wiped
+  // to 0 before the real count arrives.
+  useEffect(() => {
+    if (authed && conversationsLoaded) setBadge(totalUnread);
+  }, [authed, conversationsLoaded, totalUnread]);
+
+  const markRead = useCallback((id) => {
+    setConversations((prev) => prev.map((c) => (c._id === id ? { ...c, adminUnread: 0 } : c)));
+    socket.emit('admin:read', id);
+  }, []);
+
+  // Coming back to a tab that has a conversation open counts as reading whatever arrived meanwhile.
+  useEffect(() => {
+    const onVisible = () => {
+      const id = selectedIdRef.current;
+      if (document.visibilityState !== 'visible' || !id) return;
+      const open = conversationsRef.current.find((c) => c._id === id);
+      if (open?.adminUnread > 0) markRead(id);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [markRead]);
 
   const fetchConversations = useCallback(async (activeToken) => {
     try {
@@ -72,6 +106,7 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error('Failed to load conversations');
       const data = await res.json();
       setConversations(data);
+      setConversationsLoaded(true);
     } catch {
       // ignore — list stays empty, real-time updates will still arrive via socket
     }
@@ -79,7 +114,10 @@ export default function AdminDashboard() {
 
   // Socket listeners (registered once)
   useEffect(() => {
-    const onAuthed = () => setAuthed(true);
+    const onAuthed = () => {
+      setAuthed(true);
+      setAuthTick((t) => t + 1); // also fires on reconnect, so anything missed while offline is re-fetched
+    };
     const onAuthError = () => {
       localStorage.removeItem(TOKEN_KEY);
       setToken(null);
@@ -89,6 +127,12 @@ export default function AdminDashboard() {
       setConversations((prev) => [conv, ...prev]);
     };
     const onConversationUpdate = (update) => {
+      // If the admin is looking at this conversation right now, what just arrived is already read.
+      const beingRead =
+        update.conversationId === selectedIdRef.current &&
+        document.visibilityState === 'visible' &&
+        update.adminUnread > 0;
+
       setConversations((prev) => {
         const next = prev.map((c) =>
           c._id === update.conversationId
@@ -98,15 +142,13 @@ export default function AdminDashboard() {
                 email: update.email ?? c.email,
                 lastMessageText: update.lastMessageText ?? c.lastMessageText,
                 lastMessageAt: update.lastMessageAt ?? c.lastMessageAt,
+                adminUnread: beingRead ? 0 : update.adminUnread ?? c.adminUnread ?? 0,
               }
             : c
         );
         return next.sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
       });
-      // Only real new messages count as unread — identity-only updates carry no lastMessageText
-      if (update.lastMessageText !== undefined && update.conversationId !== selectedIdRef.current) {
-        setUnreadIds((prev) => new Set(prev).add(update.conversationId));
-      }
+      if (beingRead) socket.emit('admin:read', update.conversationId);
     };
     const onMessageNew = (msg) => {
       if (msg.conversationId === selectedIdRef.current) {
@@ -154,11 +196,12 @@ export default function AdminDashboard() {
   }, [token]);
 
   useEffect(() => {
-    if (authed && token) {
-      fetchConversations(token);
-      subscribeAdminToPush(token);
-    }
-  }, [authed, token, fetchConversations]);
+    if (authed && token) fetchConversations(token);
+  }, [authed, token, authTick, fetchConversations]);
+
+  useEffect(() => {
+    if (authed && token) subscribeAdminToPush(token);
+  }, [authed, token]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -190,18 +233,16 @@ export default function AdminDashboard() {
     setToken(null);
     setAuthed(false);
     setConversations([]);
+    setConversationsLoaded(false);
     setMessages([]);
     setSelectedId(null);
+    clearBadge();
   };
 
   const selectConversation = async (id) => {
     setSelectedId(id);
     setMessages([]);
-    setUnreadIds((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
+    markRead(id);
     try {
       const res = await fetch(`${API_BASE}/api/conversations/${id}/messages`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -337,6 +378,14 @@ export default function AdminDashboard() {
           <div className="flex items-center gap-2">
             <Inbox size={16} className="text-amber-400" />
             <h2 className="text-xs font-black uppercase tracking-wide">Support Inbox</h2>
+            {totalUnread > 0 && (
+              <span
+                data-testid="total-unread"
+                className="min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center"
+              >
+                {totalUnread > 99 ? '99+' : totalUnread}
+              </span>
+            )}
           </div>
           <button onClick={handleLogout} aria-label="Log out" className="p-2 -mr-2 text-gray-400 hover:text-white">
             <LogOut size={16} />
@@ -355,13 +404,20 @@ export default function AdminDashboard() {
               }`}
             >
               <div className="flex items-center justify-between mb-0.5">
-                <span className="flex items-center gap-1.5 text-xs font-bold text-white truncate">
-                  {unreadIds.has(c._id) && <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />}
-                  {c.userName}
-                </span>
+                <span className="text-xs font-bold text-white truncate">{c.userName}</span>
                 <span className="text-[9px] text-gray-500 shrink-0 ml-2">{timeAgo(c.lastMessageAt)}</span>
               </div>
-              <p className="text-[10px] text-gray-500 truncate">{c.lastMessageText || 'No messages yet'}</p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] text-gray-500 truncate">{c.lastMessageText || 'No messages yet'}</p>
+                {c.adminUnread > 0 && (
+                  <span
+                    data-testid="conv-unread"
+                    className="min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center shrink-0"
+                  >
+                    {c.adminUnread > 99 ? '99+' : c.adminUnread}
+                  </span>
+                )}
+              </div>
             </button>
           ))}
         </div>

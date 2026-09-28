@@ -12,7 +12,7 @@ async function subscribe(req, res) {
   await PushSubscription.findOneAndUpdate(
     { endpoint },
     { endpoint, keys },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: 'after' }
   );
   res.status(201).json({ message: 'Subscribed' });
 }

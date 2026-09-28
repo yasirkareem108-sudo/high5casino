@@ -17,16 +17,30 @@ self.addEventListener('push', (event) => {
     // non-JSON payload — fall back to defaults
   }
 
-  event.waitUntil(
+  const tasks = [
     self.registration.showNotification(data.title, {
       body: data.body,
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
       vibrate: [200, 100, 200],
       data: { url: data.url || '/admin' },
-    })
-  );
+    }),
+  ];
+  // The server sends the admin's total unread count with each push, so the app icon badge
+  // stays right even while the app is closed. Silently a no-op where the Badging API is missing.
+  if (typeof data.badge === 'number') tasks.push(setAppBadge(data.badge));
+  event.waitUntil(Promise.all(tasks));
 });
+
+function setAppBadge(count) {
+  const nav = self.navigator;
+  if (!nav || !('setAppBadge' in nav)) return Promise.resolve();
+  try {
+    return Promise.resolve(count > 0 ? nav.setAppBadge(count) : nav.clearAppBadge()).catch(() => {});
+  } catch {
+    return Promise.resolve();
+  }
+}
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();

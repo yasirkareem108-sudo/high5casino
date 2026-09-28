@@ -3,7 +3,9 @@ const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
 const User = require('../models/User');
 const Deposit = require('../models/Deposit');
-const { notifyAdmins } = require('../services/push');
+const push = require('../services/push');
+const { totalUnread } = require('../services/adminAlerts');
+const { runExclusive } = require('../services/keyedQueue');
 
 const OBJECT_ID = /^[a-f0-9]{24}$/;
 const UPLOAD_URL = /^\/uploads\/[\w.-]+$/;
@@ -29,12 +31,13 @@ async function getOrCreateConversation(user) {
   conversation = await Conversation.findOneAndUpdate(
     { email: user.email, userId: { $not: OBJECT_ID } },
     { $set: { userId, userName: user.name } },
-    { sort: { lastMessageAt: -1 }, new: true }
+    { sort: { lastMessageAt: -1 }, returnDocument: 'after' }
   );
   if (conversation) return { conversation, created: false, changed: true };
 
   try {
-    conversation = await Conversation.create({ userId, userName: user.name, email: user.email });
+    // A brand-new account opening chat for the first time counts as one unread alert ("new player").
+    conversation = await Conversation.create({ userId, userName: user.name, email: user.email, adminUnread: 1 });
     return { conversation, created: true, changed: false };
   } catch (err) {
     // Two tabs joining at once: the unique index on userId means only one create wins.
@@ -47,14 +50,25 @@ async function getOrCreateConversation(user) {
 
 function registerChatHandlers(io) {
   // Persists a message, bumps the conversation preview, and fans it out.
-  async function publish(conversationId, fields, preview) {
-    const message = await Message.create({ conversationId, ...fields });
-    const lastMessageAt = new Date();
-    await Conversation.findByIdAndUpdate(conversationId, { lastMessageText: preview, lastMessageAt });
+  // Messages from a player also add one to the admin's unread count for that conversation.
+  // Serialized per conversation so the unread counts we announce arrive in the order they were applied.
+  function publish(conversationId, fields, preview) {
+    return runExclusive(String(conversationId), async () => {
+      const message = await Message.create({ conversationId, ...fields });
+      const lastMessageAt = new Date();
+      const update = { $set: { lastMessageText: preview, lastMessageAt } };
+      if (fields.sender === 'user') update.$inc = { adminUnread: 1 };
+      const conversation = await Conversation.findByIdAndUpdate(conversationId, update, { returnDocument: 'after' });
 
-    io.to(`conv:${conversationId}`).emit('message:new', message);
-    io.to('admins').emit('conversation:update', { conversationId, lastMessageText: preview, lastMessageAt });
-    return message;
+      io.to(`conv:${conversationId}`).emit('message:new', message);
+      io.to('admins').emit('conversation:update', {
+        conversationId,
+        lastMessageText: preview,
+        lastMessageAt,
+        adminUnread: conversation?.adminUnread ?? 0,
+      });
+      return message;
+    });
   }
 
   io.on('connection', (socket) => {
@@ -76,6 +90,24 @@ function registerChatHandlers(io) {
     socket.on('admin:join_conversation', (conversationId) => {
       if (!socket.isAdmin || !OBJECT_ID.test(String(conversationId))) return;
       socket.join(`conv:${conversationId}`);
+    });
+
+    // The admin opened / is looking at this conversation: clear its unread alerts.
+    // Broadcast to all admins so other tabs and devices drop their badge too.
+    socket.on('admin:read', async (conversationId) => {
+      if (!socket.isAdmin || !OBJECT_ID.test(String(conversationId))) return;
+      try {
+        await runExclusive(String(conversationId), async () => {
+          const conversation = await Conversation.findByIdAndUpdate(
+            conversationId,
+            { $set: { adminUnread: 0 } },
+            { returnDocument: 'after' }
+          );
+          if (conversation) io.to('admins').emit('conversation:update', { conversationId, adminUnread: 0 });
+        });
+      } catch (err) {
+        // non-critical — the next unread update will resync
+      }
     });
 
     socket.on('admin:message', async ({ conversationId, text, imageUrl } = {}) => {
@@ -104,7 +136,7 @@ function registerChatHandlers(io) {
         const deposit = await Deposit.findOneAndUpdate(
           { _id: depositId, status: 'pending' },
           { status: decision, decidedAt: new Date() },
-          { new: true }
+          { returnDocument: 'after' }
         );
         if (!deposit) {
           socket.emit('error:message', 'That deposit was already decided');
@@ -156,6 +188,15 @@ function registerChatHandlers(io) {
 
         if (created) {
           io.to('admins').emit('conversation:new', conversation);
+          push
+            .notifyAdmins({
+              title: 'New player',
+              body: `${conversation.userName} just signed up`,
+              url: '/admin',
+              conversationId: conversation._id,
+              badge: await totalUnread().catch(() => undefined),
+            })
+            .catch(() => {});
         } else if (changed) {
           io.to('admins').emit('conversation:update', {
             conversationId: conversation._id,
@@ -222,12 +263,15 @@ function registerChatHandlers(io) {
             game,
             amount,
           });
-          notifyAdmins({
-            title: `💳 Deposit request — ${conversation.userName}`,
-            body: `$${amount} via ${method} for ${game}`,
-            url: '/admin',
-            conversationId,
-          }).catch(() => {});
+          push
+            .notifyAdmins({
+              title: `💳 Deposit request — ${conversation.userName}`,
+              body: `$${amount} via ${method} for ${game}`,
+              url: '/admin',
+              conversationId,
+              badge: await totalUnread().catch(() => undefined),
+            })
+            .catch(() => {});
           return;
         }
 
@@ -240,12 +284,15 @@ function registerChatHandlers(io) {
           { sender: 'user', type: cleanImage ? 'image' : 'text', text: cleanText, imageUrl: cleanImage },
           cleanImage ? '📷 Image' : cleanText
         );
-        notifyAdmins({
-          title: `New message from ${conversation.userName}`,
-          body: cleanImage ? '📷 Sent an image' : cleanText,
-          url: '/admin',
-          conversationId,
-        }).catch(() => {});
+        push
+          .notifyAdmins({
+            title: `New message from ${conversation.userName}`,
+            body: cleanImage ? '📷 Sent an image' : cleanText,
+            url: '/admin',
+            conversationId,
+            badge: await totalUnread().catch(() => undefined),
+          })
+          .catch(() => {});
       } catch (err) {
         socket.emit('error:message', 'Could not send message');
       }

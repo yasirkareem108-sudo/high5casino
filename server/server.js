@@ -52,6 +52,7 @@ const io = new Server(server, {
 });
 
 registerChatHandlers(io);
+app.set('io', io);
 
 io.on('connection', (socket) => {
   console.log(`⚡ User Connected: ${socket.id}`);

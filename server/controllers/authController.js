@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
+const { recordPlayerLogin } = require('../services/adminAlerts');
 
 function signToken(user) {
   return jwt.sign(
@@ -45,6 +46,9 @@ async function login(req, res) {
 
   const token = signToken(user);
   res.json({ token, user: { id: user._id, name: user.name, email: user.email } });
+
+  // Fire-and-forget: alerting the admin must never delay or fail the player's login.
+  recordPlayerLogin(req.app.get('io'), user).catch(() => {});
 }
 
 module.exports = { register, login };
