@@ -19,6 +19,30 @@ function timeAgo(dateStr) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+// Colourful initials avatar for contacts without a photo. The colour is derived from the
+// conversation id so each person keeps the same colour every time.
+const AVATAR_COLORS = [
+  'from-amber-500 to-orange-600',
+  'from-emerald-500 to-teal-600',
+  'from-sky-500 to-blue-600',
+  'from-violet-500 to-purple-600',
+  'from-pink-500 to-rose-600',
+  'from-cyan-500 to-indigo-600',
+  'from-lime-500 to-green-600',
+  'from-fuchsia-500 to-pink-600',
+];
+
+function avatarColor(key) {
+  let hash = 0;
+  for (const ch of String(key)) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+
+function avatarInitials(name) {
+  const words = String(name || '').split(/\s+/).map((w) => w.replace(/[^\p{L}\p{N}]/gu, '')).filter(Boolean);
+  return (words.slice(0, 2).map((w) => w[0]).join('') || '?').toUpperCase();
+}
+
 // Two-tone notification chime via Web Audio — no external sound file needed
 function playNotifySound() {
   try {
@@ -387,7 +411,7 @@ export default function AdminDashboard() {
 
       {/* Conversation List */}
       <aside
-        className={`${selectedId ? 'hidden md:flex' : 'flex'} w-full md:w-72 bg-[#0D111A] md:border-r border-gray-800/80 flex-col shrink-0 min-w-0`}
+        className={`${selectedId ? 'hidden md:flex' : 'flex'} w-full md:w-80 bg-[#0D111A] md:border-r border-gray-800/80 flex-col shrink-0 min-w-0`}
       >
         <div className="px-4 py-3 border-b border-gray-800/80 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -421,33 +445,60 @@ export default function AdminDashboard() {
         </div>
         <div className="flex-1 overflow-y-auto">
           {conversations.length === 0 && (
-            <p className="text-[11px] text-gray-600 text-center mt-6 px-4">No conversations yet.</p>
+            <div className="flex flex-col items-center gap-2 text-center mt-16 px-6 text-gray-600">
+              <Inbox size={28} className="text-gray-700" />
+              <p className="text-xs">No conversations yet.</p>
+            </div>
           )}
-          {conversations.map((c) => (
-            <button
-              key={c._id}
-              onClick={() => selectConversation(c._id)}
-              className={`w-full text-left px-4 py-3 border-b border-gray-900 transition-all ${
-                selectedId === c._id ? 'bg-amber-500/10 border-l-2 border-l-amber-500' : 'hover:bg-[#131824]'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-0.5">
-                <span className="text-xs font-bold text-white truncate">{c.userName}</span>
-                <span className="text-[9px] text-gray-500 shrink-0 ml-2">{timeAgo(c.lastMessageAt)}</span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-[10px] text-gray-500 truncate">{c.lastMessageText || 'No messages yet'}</p>
-                {c.adminUnread > 0 && (
-                  <span
-                    data-testid="conv-unread"
-                    className="min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center shrink-0"
-                  >
-                    {c.adminUnread > 99 ? '99+' : c.adminUnread}
+          {conversations.map((c) => {
+            const selected = selectedId === c._id;
+            const unread = c.adminUnread > 0;
+            return (
+              <button
+                key={c._id}
+                onClick={() => selectConversation(c._id)}
+                className={`relative w-full text-left flex items-center gap-3 pl-3 pr-4 py-3 border-l-[3px] transition-colors
+                  after:absolute after:bottom-0 after:left-[4.25rem] after:right-0 after:h-px after:bg-gray-800/70 ${
+                  selected
+                    ? 'bg-amber-500/10 border-l-amber-500'
+                    : unread
+                      ? 'bg-red-500/[0.05] border-l-red-500 hover:bg-[#131824]'
+                      : 'border-l-transparent hover:bg-[#131824] active:bg-[#171d2c]'
+                }`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`w-11 h-11 shrink-0 rounded-full bg-gradient-to-br ${avatarColor(c._id)} text-white text-sm font-black flex items-center justify-center shadow-md shadow-black/40`}
+                >
+                  {avatarInitials(c.userName)}
+                </span>
+
+                <span className="flex-1 min-w-0">
+                  <span className="flex items-baseline justify-between gap-2">
+                    <span className={`truncate text-sm ${unread ? 'font-extrabold text-white' : 'font-semibold text-gray-100'}`}>
+                      {c.userName}
+                    </span>
+                    <span className={`text-[10px] shrink-0 ${unread ? 'text-red-400 font-semibold' : 'text-gray-500'}`}>
+                      {timeAgo(c.lastMessageAt)}
+                    </span>
                   </span>
-                )}
-              </div>
-            </button>
-          ))}
+                  <span className="flex items-center justify-between gap-2 mt-0.5">
+                    <span className={`truncate text-xs ${unread ? 'text-gray-200 font-medium' : 'text-gray-500'}`}>
+                      {c.lastMessageText || 'No messages yet'}
+                    </span>
+                    {unread && (
+                      <span
+                        data-testid="conv-unread"
+                        className="min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center shrink-0"
+                      >
+                        {c.adminUnread > 99 ? '99+' : c.adminUnread}
+                      </span>
+                    )}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
         </div>
       </aside>
 
